@@ -218,7 +218,7 @@ function renderFiltered() {
 }
 
 function showModal(m) {
-    const p1 = m.players || {};
+    const p1 = m.player1 || {};
     const p2 = m.player2 || {};
     const tour = m.tournament || {};
     const cs = m.confidence_score;
