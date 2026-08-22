@@ -22,21 +22,21 @@
         </header>
 
         <nav class="tabs">
-            <button class="tab active" data-tab="today">
+            <button class="tab active" data-tab="live">
+                <span class="tab-icon">🔴</span>
+                <span class="tab-label">Live</span>
+            </button>
+            <button class="tab" data-tab="today">
                 <span class="tab-icon">📅</span>
                 <span class="tab-label">Hoje</span>
-            </button>
-            <button class="tab" data-tab="upcoming">
-                <span class="tab-icon">📋</span>
-                <span class="tab-label">Próximos</span>
             </button>
             <button class="tab" data-tab="results">
                 <span class="tab-icon">🏆</span>
                 <span class="tab-label">Resultados</span>
             </button>
-            <button class="tab" data-tab="predictions">
-                <span class="tab-icon">🎯</span>
-                <span class="tab-label">Previsões</span>
+            <button class="tab" data-tab="upcoming">
+                <span class="tab-icon">📋</span>
+                <span class="tab-label">Próximos</span>
             </button>
             <button class="tab" data-tab="stats">
                 <span class="tab-icon">📊</span>
@@ -52,17 +52,17 @@
         </div>
 
         <main class="content">
-            <section id="tab-today" class="panel active">
-                <div id="today-matches" class="matches"></div>
+            <section id="tab-live" class="panel active">
+                <div id="live-matches" class="matches"></div>
             </section>
-            <section id="tab-upcoming" class="panel">
-                <div id="upcoming-matches" class="matches"></div>
+            <section id="tab-today" class="panel">
+                <div id="today-matches" class="matches"></div>
             </section>
             <section id="tab-results" class="panel">
                 <div id="results-matches" class="matches"></div>
             </section>
-            <section id="tab-predictions" class="panel">
-                <div id="predictions-matches" class="matches"></div>
+            <section id="tab-upcoming" class="panel">
+                <div id="upcoming-matches" class="matches"></div>
             </section>
             <section id="tab-stats" class="panel">
                 <div id="stats-panel" class="stats"></div>
@@ -80,7 +80,6 @@
         <div id="toast" class="toast"></div>
     </div>
 
-    <script src="/js/api.js"></script>
     <script src="/js/app.js"></script>
 </body>
 </html>

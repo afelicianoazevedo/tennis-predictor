@@ -1,7 +1,7 @@
 const SUPABASE_URL = 'https://ywmrxvurnxgnmpcjnisi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3bXJ4dnVybnhnbm1wY2puaXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MDA2MjIsImV4cCI6MjEwMjk3NjYyMn0.TXp8PMNWoKekdmkByhvtJodS7OLmMeRGiBp1WomOCA0';
 
-let currentTab = 'today';
+let currentTab = 'live';
 let currentFilter = 'all';
 let cachedData = {};
 
@@ -29,18 +29,28 @@ async function api(table, opts = {}) {
 const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender)';
 const TOUR_SELECT = 'tournament:tournaments(name)';
 
+async function loadLive() {
+    return api('matches', {
+        select: `id,scheduled_at,status,round,surface,score,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
+        eq: { status: 'live' }, order: 'scheduled_at.asc'
+    });
+}
+
 async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
+    // Only show upcoming games for today (not live, not completed)
     return api('matches', {
         select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
-        gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow }
+        gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
+        eq: { status: 'upcoming' }
     });
 }
 
 async function loadUpcoming() {
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
+    // Only show future games (not today)
     return api('matches', {
         select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200
@@ -52,15 +62,6 @@ async function loadResults() {
     return api('matches', {
         select: `id,scheduled_at,status,round,surface,score,winner_id,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
-    });
-}
-
-async function loadPredictions() {
-    const today = new Date().toISOString().split('T')[0];
-    const three = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
-    return api('matches', {
-        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
-        gte: { scheduled_at: today }, lte: { scheduled_at: three }, order: 'confidence_score.desc.nullslast', limit: 100
     });
 }
 
@@ -341,10 +342,10 @@ async function switchTab(tab) {
     if (!cachedData[tab]) {
         loader(true);
         try {
-            if (tab === 'today') cachedData[tab] = await loadToday();
+            if (tab === 'live') cachedData[tab] = await loadLive();
+            else if (tab === 'today') cachedData[tab] = await loadToday();
             else if (tab === 'upcoming') cachedData[tab] = await loadUpcoming();
             else if (tab === 'results') cachedData[tab] = await loadResults();
-            else if (tab === 'predictions') cachedData[tab] = await loadPredictions();
             log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + tab);
         } catch (e) {
             log('ERROR loading ' + tab + ': ' + e.message);
@@ -398,6 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
-    log('Initialization complete, loading today...');
-    switchTab('today');
+    log('Initialization complete, loading live...');
+    switchTab('live');
 });
