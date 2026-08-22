@@ -2,70 +2,23 @@ name: Tennis Predictor Sync
 
 on:
   schedule:
-    - cron: '0 7 * * *'         # Morning sync 07:00 UTC (08:00 PT)
-    - cron: '15 7 * * *'        # Generate predictions 07:15 UTC
-    - cron: '*/5 * * * *'       # Results sync every 5 minutes (24/7)
-    - cron: '0 12 * * *'        # Pre-game 12:00 UTC (13:00 PT)
-    - cron: '*/15 9-22 * * *'   # Live poll every 15min
-  workflow_dispatch:            # Manual trigger from GitHub UI
+    - cron: '*/3 * * * *'       # Sync every 3 minutes (24/7)
+  workflow_dispatch:            # Manual trigger
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Get current time
-        id: time
-        run: | 
-          HOUR=$(date -u +%H)
-          MIN=$(date -u +%M)
-          echo "hour=$HOUR" >> $GITHUB_OUTPUT
-          echo "min=$MIN" >> $GITHUB_OUTPUT
-          # Check if minute is divisible by 5
-          REMAINDER=$((MIN % 5))
-          if [ $REMAINDER -eq 0 ]; then
-            echo "is_five_min=true" >> $GITHUB_OUTPUT
-          else
-            echo "is_five_min=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Morning Sync
-        if: steps.time.outputs.hour == '07' && steps.time.outputs.min == '00'
+      - name: Sync matches from SportScore
         run: |
           curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=morning" \
+            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=sync" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
 
-      - name: Generate Predictions
-        if: steps.time.outputs.hour == '07' && steps.time.outputs.min == '15'
+      - name: Generate predictions
         run: |
           curl -s -X POST \
             "https://ywmrxvurnxgnmpcjnisi.supabase.co/rest/v1/rpc/generate_all_predictions" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Content-Type: application/json" \
             -d ''
-
-      - name: Results Sync (every 5 min, today + yesterday)
-        if: steps.time.outputs.is_five_min == 'true'
-        run: |
-          # Sync today's results
-          curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=results&date=$(date -u +%Y-%m-%d)" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
-          # Also sync yesterday's results (late finishes)
-          curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=results&date=$(date -u -d 'yesterday' +%Y-%m-%d)" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
-
-      - name: Pre-Game Sync
-        if: steps.time.outputs.hour == '12' && steps.time.outputs.min == '00'
-        run: |
-          curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=pre_game" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
-
-      - name: Live Poll
-        if: steps.time.outputs.hour >= '9' && steps.time.outputs.hour <= '22'
-        run: |
-          curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=live" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
