@@ -136,12 +136,12 @@ function statusLabel(s) {
 function filterMatches(matches, cat) {
     if (cat === 'all') return matches;
     return matches.filter(m => {
-        const p1 = m.players?.name || '';
+        const p1 = m.player1?.name || '';
         const p2 = m.player2?.name || '';
         const doubles = p1.includes('/') || p2.includes('/');
         if (cat === 'doubles') return doubles;
-        if (cat === 'men') return !doubles && m.players?.gender === 'M';
-        if (cat === 'women') return !doubles && m.players?.gender === 'F';
+        if (cat === 'men') return !doubles && m.player1?.gender === 'M';
+        if (cat === 'women') return !doubles && m.player1?.gender === 'F';
         return true;
     });
 }
