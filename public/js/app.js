@@ -4,6 +4,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let currentTab = 'live';
 let currentFilter = 'all';
 let cachedData = {};
+let livePollInterval = null;
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -31,7 +32,7 @@ const TOUR_SELECT = 'tournament:tournaments(name)';
 
 async function loadLive() {
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'live' }, order: 'scheduled_at.asc'
     });
 }
@@ -41,7 +42,7 @@ async function loadToday() {
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     // Only show upcoming games for today (not live, not completed)
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
@@ -52,7 +53,7 @@ async function loadUpcoming() {
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
     // Only show future games (not today)
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200
     });
 }
@@ -60,37 +61,39 @@ async function loadUpcoming() {
 async function loadResults() {
     const week = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,winner_id,confidence_score,confidence_level,predicted_winner_id,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
 }
 
 async function loadStats(period = 'all') {
-    let dateFilter = {};
+    let start = null;
     const now = new Date();
 
     if (period === 'day') {
-        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-        dateFilter = { gte: { created_at: start } };
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     } else if (period === 'week') {
         const day = now.getDay();
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const start = new Date(now.setDate(diff)).toISOString();
-        dateFilter = { gte: { created_at: start } };
+        const weekStart = new Date(now);
+        weekStart.setDate(diff);
+        start = weekStart.toISOString();
     } else if (period === 'month') {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        dateFilter = { gte: { created_at: start } };
+        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
     } else if (period === 'year') {
-        const start = new Date(now.getFullYear(), 0, 1).toISOString();
-        dateFilter = { gte: { created_at: start } };
+        start = new Date(now.getFullYear(), 0, 1).toISOString();
     }
 
     const predictions = await api('match_predictions', {
         select: 'id,was_correct,created_at',
-        ...dateFilter
+        ...(start ? { gte: { created_at: start } } : {})
     });
 
-    const matches = await api('matches', { select: 'id,status' });
+    const matches = await api('matches', {
+        select: 'id,status,scheduled_at',
+        ...(start ? { gte: { scheduled_at: start } } : {})
+    });
+
     const today = now.toISOString().split('T')[0];
     const todayGames = matches.filter(m => m.scheduled_at?.startsWith(today)).length;
     const live = matches.filter(m => m.status === 'live').length;
@@ -100,8 +103,9 @@ async function loadStats(period = 'all') {
     const correct = predictions.filter(p => p.was_correct === true).length;
     const wrong = predictions.filter(p => p.was_correct === false).length;
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
+    const wrongPct = withPredictions > 0 ? Math.round((wrong / withPredictions) * 100) : 0;
 
-    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, total: matches.length };
+    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length };
 }
 
 function time(d) {
@@ -157,37 +161,40 @@ function renderMatch(m) {
     const p1Fav = predId && p1.id === predId;
     const p2Fav = predId && p2.id === predId;
     const isCompleted = m.status === 'completed';
-    const wasCorrect = m.was_correct;
+    const isLive = m.status === 'live';
+    const p1Prob = m.player1_probability;
+    const p2Prob = m.player2_probability;
+
+    const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
 
     return `
-        <div class="match c-${cc}" data-id="${m.id}">
-            <div class="match-time">${time(m.scheduled_at)}</div>
+        <div class="match c-${cc} ${isLive ? 'is-live' : ''}" data-id="${m.id}">
+            <div class="match-time">${time(m.scheduled_at)}${isLive ? '<br><span class="live-dot">●</span>' : ''}</div>
             <div class="match-body">
                 <div class="match-tour">${tour.name || ''} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</div>
                 <div class="match-players">
                     <div class="player">
                         <div class="player-name">
-                            ${p1Fav ? '<span class="fav">➤</span>' : ''}
                             ${p1.name || 'TBD'}
-                            ${isCompleted && wasCorrect === true && p1Fav ? '<span class="check">✓</span>' : ''}
-                            ${isCompleted && wasCorrect === false && p1Fav ? '<span class="cross">✗</span>' : ''}
                         </div>
                         <div class="player-info">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
-                        ${p1Fav && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}</span>` : ''}
+                        ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob}%</span>` : ''}
+                        ${p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : ''}
+                        ${p1Fav && isCompleted && wasCorrect === true ? '<span class="check result-icon">✓</span>' : ''}
+                        ${p1Fav && isCompleted && wasCorrect === false ? '<span class="cross result-icon">✗</span>' : ''}
                     </div>
-                    <span class="match-vs">vs</span>
+                    <div class="match-score-vs">${m.score || 'vs'}</div>
                     <div class="player">
                         <div class="player-name">
-                            ${p2Fav ? '<span class="fav">➤</span>' : ''}
                             ${p2.name || 'TBD'}
-                            ${isCompleted && wasCorrect === true && p2Fav ? '<span class="check">✓</span>' : ''}
-                            ${isCompleted && wasCorrect === false && p2Fav ? '<span class="cross">✗</span>' : ''}
                         </div>
                         <div class="player-info">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
-                        ${p2Fav && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}</span>` : ''}
+                        ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob}%</span>` : ''}
+                        ${p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : ''}
+                        ${p2Fav && isCompleted && wasCorrect === true ? '<span class="check result-icon">✓</span>' : ''}
+                        ${p2Fav && isCompleted && wasCorrect === false ? '<span class="cross result-icon">✗</span>' : ''}
                     </div>
                 </div>
-                ${m.score ? `<div class="match-score">${m.score}</div>` : ''}
             </div>
         </div>
     `;
@@ -224,6 +231,9 @@ function showModal(m) {
     const tour = m.tournament || {};
     const cs = m.confidence_score;
     const cc = confClass(cs);
+    const predId = m.predicted_winner_id;
+    const p1Fav = predId && p1.id === predId;
+    const p2Fav = predId && p2.id === predId;
 
     document.getElementById('modal-content').innerHTML = `
         <h3>${tour.name || 'Jogo'}</h3>
@@ -232,25 +242,34 @@ function showModal(m) {
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p1.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
+                ${p1Fav && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : ''}
             </div>
             <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">VS</div>
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
+                ${p2Fav && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}/100</span>` : ''}
             </div>
         </div>
+        <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         ${m.score ? `<div style="text-align:center;font-size:1.3rem;font-weight:bold;color:var(--accent);margin-bottom:12px">${m.score}</div>` : ''}
-        ${cs != null ? `<div style="text-align:center;margin-bottom:12px"><span class="confidence ${cc}">${confLabel(cs)} ${cs}/100</span></div>` : ''}
         <div style="background:var(--bg);padding:12px;border-radius:8px;font-size:0.8rem">
             <p><strong>Estado:</strong> ${statusLabel(m.status)}</p>
             ${m.best_of ? `<p><strong>Formato:</strong> Melhor de ${m.best_of}</p>` : ''}
         </div>
     `;
     document.getElementById('modal').classList.add('active');
+
+    if (p1.id && p2.id) {
+        loadH2H(p1.id, p2.id);
+    }
 }
 
 function showStats(s) {
     const el = document.getElementById('stats-panel');
+    const accuracy = s.withPredictions > 0 ? Math.round((s.correct / s.withPredictions) * 100) : 0;
+    const wrongPct = s.withPredictions > 0 ? Math.round((s.wrong / s.withPredictions) * 100) : 0;
+
     el.innerHTML = `
         <div class="stats-period">
             <button class="period-btn active" data-period="all">Todos</button>
@@ -274,19 +293,20 @@ function showStats(s) {
                 </div>
                 <div class="accuracy-item correct">
                     <span class="acc-value">${s.correct}</span>
-                    <span class="acc-label">Acertos</span>
+                    <span class="acc-label">Acertos (${accuracy}%)</span>
                 </div>
                 <div class="accuracy-item wrong">
                     <span class="acc-value">${s.wrong}</span>
-                    <span class="acc-label">Falhas</span>
-                </div>
-                <div class="accuracy-item percent">
-                    <span class="acc-value">${s.accuracy}%</span>
-                    <span class="acc-label">Precisão</span>
+                    <span class="acc-label">Falhas (${wrongPct}%)</span>
                 </div>
             </div>
         </div>
+        <div class="chart-container">
+            <canvas id="accuracy-chart"></canvas>
+        </div>
     `;
+
+    renderAccuracyChart(s.correct, s.wrong, accuracy, wrongPct);
 
     el.querySelectorAll('.period-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -303,9 +323,88 @@ function showStats(s) {
     });
 }
 
+function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
+    const ctx = document.getElementById('accuracy-chart');
+    if (!ctx) return;
+
+    if (window.accuracyChartInstance) {
+        window.accuracyChartInstance.destroy();
+    }
+
+    window.accuracyChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Acertos', 'Falhas'],
+            datasets: [{
+                label: 'Previsões',
+                data: [correct, wrong],
+                backgroundColor: ['#22c55e', '#ef4444'],
+                borderRadius: 8,
+                barThickness: 40
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = correct + wrong;
+                            const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
+                            return `${context.raw} (${pct}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, color: '#94a3b8' },
+                    grid: { color: '#334155' }
+                },
+                x: {
+                    ticks: { color: '#f1f5f9' },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
 function loader(show) {
     const el = document.getElementById('loader');
     if (el) el.classList.toggle('active', show);
+}
+
+async function loadH2H(id1, id2) {
+    try {
+        const [r1, r2] = await Promise.all([
+            api('matches', {
+                select: 'winner_id',
+                eq: { player1_id: id1, player2_id: id2, status: 'completed' },
+                limit: 50
+            }),
+            api('matches', {
+                select: 'winner_id',
+                eq: { player1_id: id2, player2_id: id1, status: 'completed' },
+                limit: 50
+            })
+        ]);
+
+        const all = [...(r1 || []), ...(r2 || [])];
+        const p1Wins = all.filter(m => m.winner_id === id1).length;
+        const p2Wins = all.filter(m => m.winner_id === id2).length;
+
+        const el = document.getElementById('modal-h2h');
+        if (el && (p1Wins > 0 || p2Wins > 0)) {
+            el.textContent = `H2H: ${p1Wins}-${p2Wins}`;
+        } else if (el) {
+            el.textContent = 'H2H: Sem jogos anteriores';
+        }
+    } catch (e) {
+        console.error('Error loading H2H:', e);
+    }
 }
 
 function toast(msg) {
@@ -324,6 +423,11 @@ async function switchTab(tab) {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     const panel = document.getElementById(`tab-${tab}`);
     if (panel) panel.classList.add('active');
+
+    if (livePollInterval) {
+        clearInterval(livePollInterval);
+        livePollInterval = null;
+    }
 
     if (tab === 'stats') {
         loader(true);
@@ -357,6 +461,21 @@ async function switchTab(tab) {
 
     if (tab !== 'stats') {
         renderFiltered();
+    }
+
+    if (tab === 'live') {
+        livePollInterval = setInterval(async () => {
+            log('Polling live matches...');
+            try {
+                const data = await loadLive();
+                cachedData['live'] = data;
+                if (currentTab === 'live') {
+                    renderFiltered();
+                }
+            } catch (e) {
+                log('Poll error: ' + e.message);
+            }
+        }, 30000);
     }
 }
 

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+<h1>API Test</h1>
+<pre id="output">Loading...</pre>
+<script>
+const SUPABASE_URL = 'https://ywmrxvurnxgnmpcjnisi.supabase.co';
+const ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3bXJ4dnVybnhnbm1wY2puaXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MDA2MjIsImV4cCI6MjEwMjk3NjYyMn0.TXp8PMNWoKekdmkByhvtJodS7OLmMeRGiBp1WomOCA0';
+
+async function test() {
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/matches?select=id,scheduled_at,confidence_score&limit=3`, {
+            headers: { 'apikey': ANON_KEY, 'Authorization': `Bearer ${ANON_KEY}` }
+        });
+        const data = await res.json();
+        document.getElementById('output').textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+        document.getElementById('output').textContent = 'Error: ' + e.message;
+    }
+}
+test();
+</script>
+</body>
+</html>

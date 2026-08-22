@@ -19,8 +19,6 @@ declare
     v_winner_id bigint;
     v_player1_id bigint;
     v_player2_id bigint;
-    v_home_player_name text;
-    v_away_player_name text;
     v_match_status text;
 begin
     -- Obter dados do jogo
@@ -33,20 +31,28 @@ begin
         return;
     end if;
 
-    -- Determinar vencedor baseado no score
-    if p_home_score > p_away_score then
-        v_winner_id := v_player1_id;
-    elsif p_away_score > p_home_score then
-        v_winner_id := v_player2_id;
+    -- Determinar vencedor baseado no score (apenas para jogos terminados)
+    if p_status = 'finished' then
+        if p_home_score > p_away_score then
+            v_winner_id := v_player1_id;
+        elsif p_away_score > p_home_score then
+            v_winner_id := v_player2_id;
+        else
+            v_winner_id := null;
+        end if;
     else
-        v_winner_id := null; -- Empate (raro no ténis, mas possível em alguns formatos)
+        v_winner_id := null; -- Jogo ao vivo não tem vencedor ainda
     end if;
 
     -- Atualizar jogo com resultado
     update public.matches set
         score = p_home_score || '-' || p_away_score,
         winner_id = v_winner_id,
-        status = case when p_status = 'finished' then 'completed' else status end,
+        status = case
+            when p_status = 'finished' then 'completed'
+            when p_status = 'live' then 'live'
+            else status
+        end,
         updated_at = now()
     where id = p_match_id;
 end;

@@ -56,8 +56,8 @@ begin
     p2_prob = 1.0 - p1_prob;
 
     -- Converter para percentagem
-    p1_prob = round(p1_prob * 100, 2);
-    p2_prob = round(p2_prob * 100, 2);
+    p1_prob = round(p1_prob * 100, 0);
+    p2_prob = round(p2_prob * 100, 0);
 
     -- Calcular confiança baseada na diferença de ranking
     rank_diff = abs(p1_ranking - p2_ranking)::numeric;
@@ -65,6 +65,7 @@ begin
 
     -- Confiança: maior diferença = maior confiança
     conf_score = least(95, greatest(10, (rank_diff / total_rank) * 200 + 30));
+    conf_score = round(conf_score, 0);
 
     -- Determinar nível de confiança
     if conf_score < 50 then
@@ -140,7 +141,9 @@ begin
     update public.matches set
         confidence_score = pred.confidence_score,
         confidence_level = pred.confidence_level,
-        predicted_winner_id = pred.predicted_winner_id
+        predicted_winner_id = pred.predicted_winner_id,
+        player1_probability = pred.player1_probability,
+        player2_probability = pred.player2_probability
     where id = p_match_id;
 
     return pred_id;
@@ -161,16 +164,23 @@ declare
     count integer := 0;
 begin
     for match_record in
-        select m.id
+        select m.id, m.status, m.winner_id
         from public.matches m
         left join public.match_predictions mp on mp.match_id = m.id
         where mp.id is null
-          and m.status in ('upcoming', 'live')
+          and m.status in ('upcoming', 'live', 'completed')
           and m.player1_id is not null
           and m.player2_id is not null
     loop
         perform public.generate_prediction(match_record.id);
         count := count + 1;
+
+        if match_record.status = 'completed' and match_record.winner_id is not null then
+            update public.match_predictions set
+                was_correct = (predicted_winner_id = match_record.winner_id),
+                result = case when predicted_winner_id = match_record.winner_id then 'correct' else 'incorrect' end
+            where match_id = match_record.id;
+        end if;
     end loop;
 
     return count;

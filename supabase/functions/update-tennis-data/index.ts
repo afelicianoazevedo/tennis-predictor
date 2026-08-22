@@ -9,6 +9,16 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 const SPORTSCORE_BASE = "https://sportscore.com/api/widget/matches/";
 
+function hashToId(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        const char = str.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+    }
+    return Math.abs(hash);
+}
+
 // ============================================================
 // UTILITÁRIOS
 // ============================================================
@@ -45,15 +55,15 @@ async function sportscoreFetch(params?: Record<string, string | number>): Promis
 async function syncPlayer(name: string, country?: string | null): Promise<number | null> {
     if (!name || name === "Wsf1" || name === "Wsf2" || name === "Wqf1" || name === "Wqf2") return null;
 
-    // Tentar encontrar jogador existente
+    const apiId = hashToId(name);
+
     const { data: existing } = await supabase.from("players").select("id").ilike("name", name).maybeSingle();
     if (existing) return existing.id;
 
-    // Determinar género baseado no nome (heurística simples)
     const gender = "M"; // Default
 
-    // Criar novo jogador
     const { data: inserted, error } = await supabase.from("players").insert({
+        api_id: apiId,
         name: name,
         country: country?.toLowerCase() ?? null,
         gender: gender,
@@ -61,7 +71,7 @@ async function syncPlayer(name: string, country?: string | null): Promise<number
     }).select("id").single();
 
     if (error) {
-        console.error(`Error inserting player ${name}:`, error.message);
+        console.error(`Error inserting player ${name}:`, error.message, error.details, error.hint);
         return null;
     }
     return inserted.id;
@@ -74,12 +84,13 @@ async function syncPlayer(name: string, country?: string | null): Promise<number
 async function syncTournament(name: string): Promise<number | null> {
     if (!name) return null;
 
-    // Tentar encontrar torneio existente
+    const apiId = hashToId(name);
+
     const { data: existing } = await supabase.from("tournaments").select("id").ilike("name", name).maybeSingle();
     if (existing) return existing.id;
 
-    // Criar novo torneio
     const { data: inserted, error } = await supabase.from("tournaments").insert({
+        api_id: apiId,
         name: name,
         created_at: new Date().toISOString(),
     }).select("id").single();
@@ -110,73 +121,127 @@ async function syncMatches(): Promise<any> {
         matches_created: 0,
         matches_updated: 0,
         errors: [] as string[],
+        debug: [] as string[],
     };
 
     for (const match of matches) {
         try {
-            // Sincronizar jogadores
+            if (!match.home || !match.away || match.home.startsWith("Wsf") || match.home.startsWith("Wqf") || match.away.startsWith("Wsf") || match.away.startsWith("Wqf")) {
+                result.debug.push(`Skipped placeholder: ${match.home} vs ${match.away}`);
+                continue;
+            }
+
             const p1Id = await syncPlayer(match.home);
             const p2Id = await syncPlayer(match.away);
 
-            // Sincronizar torneio
+            if (p1Id === null || p2Id === null) {
+                result.debug.push(`Skipped (null player): ${match.home} vs ${match.away}`);
+                continue;
+            }
+
             const tourId = await syncTournament(match.competition);
 
-            // Verificar se jogo já existe (por data + jogadores)
-            const matchDate = new Date(match.time);
-            const startDate = new Date(matchDate);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(matchDate);
-            endDate.setHours(23, 59, 59, 999);
-
-            const { data: existing } = await supabase
-                .from("matches")
-                .select("id")
-                .eq("player1_id", p1Id)
-                .eq("player2_id", p2Id)
-                .gte("scheduled_at", startDate.toISOString())
-                .lte("scheduled_at", endDate.toISOString())
-                .maybeSingle();
-
-            // Determinar status
             let status = "upcoming";
             if (match.status === "finished") status = "completed";
             else if (match.status === "live") status = "live";
 
-            // Determinar score
-            const homeScore = parseInt(match.home_score) || 0;
-            const awayScore = parseInt(match.away_score) || 0;
-            const score = (match.home_score != null && match.away_score != null) ? `${homeScore}-${awayScore}` : null;
+            const homeScore = match.home_score != null ? parseInt(match.home_score) : null;
+            const awayScore = match.away_score != null ? parseInt(match.away_score) : null;
+            const score = (homeScore != null && awayScore != null) ? `${homeScore}-${awayScore}` : null;
 
-            // Determinar vencedor (apenas para jogos terminados com score)
             let winnerId = null;
-            if (status === "completed" && score && score !== "0-0") {
+            if (status === "completed" && score && score !== "0-0" && homeScore != null && awayScore != null) {
                 if (homeScore > awayScore) winnerId = p1Id;
                 else if (awayScore > homeScore) winnerId = p2Id;
             }
 
-            if (existing) {
-                // Atualizar jogo existente
-                await supabase.from("matches").update({
-                    status: status,
-                    score: score,
-                    winner_id: winnerId,
-                    tournament_id: tourId,
-                    updated_at: new Date().toISOString(),
-                }).eq("id", existing.id);
-                result.matches_updated++;
+            if (status === "completed" && score === "0-0") {
+                result.debug.push(`Skipped 0-0 completed: ${match.home} vs ${match.away}`);
+                continue;
+            }
+
+            const matchUrl = match.url || `${match.home}-vs-${match.away}`;
+            const apiId = hashToId(matchUrl);
+            const matchData = {
+                api_id: apiId,
+                player1_id: p1Id,
+                player2_id: p2Id,
+                tournament_id: tourId,
+                scheduled_at: match.time,
+                status: status,
+                score: score,
+                winner_id: winnerId,
+                sportscore_url: matchUrl,
+                home_logo: match.home_logo || null,
+                away_logo: match.away_logo || null,
+                competition_logo: match.competition_logo || null,
+                status_text: match.status_text || null,
+                updated_at: new Date().toISOString(),
+            };
+
+            let existing = null;
+
+            const { data: byUrl } = await supabase
+                .from("matches")
+                .select("id")
+                .eq("sportscore_url", matchUrl)
+                .maybeSingle();
+
+            if (byUrl) {
+                existing = byUrl;
             } else {
-                // Criar novo jogo
-                await supabase.from("matches").insert({
-                    player1_id: p1Id,
-                    player2_id: p2Id,
-                    tournament_id: tourId,
-                    scheduled_at: match.time,
-                    status: status,
-                    score: score,
-                    winner_id: winnerId,
-                    created_at: new Date().toISOString(),
-                });
-                result.matches_created++;
+                const matchDate = match.time ? match.time.split('T')[0] : null;
+                if (matchDate) {
+                    const { data: byPlayers } = await supabase
+                        .from("matches")
+                        .select("id")
+                        .eq("player1_id", p1Id)
+                        .eq("player2_id", p2Id)
+                        .eq("scheduled_at", matchDate)
+                        .maybeSingle();
+
+                    if (byPlayers) {
+                        existing = byPlayers;
+                    } else {
+                        const { data: byPlayersSwapped } = await supabase
+                            .from("matches")
+                            .select("id")
+                            .eq("player1_id", p2Id)
+                            .eq("player2_id", p1Id)
+                            .eq("scheduled_at", matchDate)
+                            .maybeSingle();
+
+                        if (byPlayersSwapped) {
+                            existing = byPlayersSwapped;
+                        }
+                    }
+                }
+            }
+
+            if (existing) {
+                const { error: updateError } = await supabase
+                    .from("matches")
+                    .update(matchData)
+                    .eq("id", existing.id);
+
+                if (updateError) {
+                    result.errors.push(`Update ${match.home} vs ${match.away}: ${updateError.message}`);
+                } else {
+                    result.matches_updated++;
+                }
+            } else {
+                const insertData = { ...matchData, created_at: new Date().toISOString() };
+                const { error: insertError } = await supabase.from("matches").insert(insertData);
+
+                if (insertError) {
+                    result.errors.push(`Insert ${match.home} vs ${match.away}: ${insertError.message}`);
+                } else {
+                    result.matches_created++;
+                }
+            }
+
+            if (score && score !== "0-0") {
+                result.debug.push(`${existing ? 'Updated' : 'Created'}: ${match.home} vs ${match.away}, Status: ${status}, Score: ${score}`);
             }
         } catch (e: any) {
             result.errors.push(`Match ${match.home} vs ${match.away}: ${e.message}`);
