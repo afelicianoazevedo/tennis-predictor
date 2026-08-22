@@ -19,6 +19,13 @@ jobs:
           MIN=$(date -u +%M)
           echo "hour=$HOUR" >> $GITHUB_OUTPUT
           echo "min=$MIN" >> $GITHUB_OUTPUT
+          # Check if minute is divisible by 5
+          REMAINDER=$((MIN % 5))
+          if [ $REMAINDER -eq 0 ]; then
+            echo "is_five_min=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_five_min=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Morning Sync
         if: steps.time.outputs.hour == '07' && steps.time.outputs.min == '00'
@@ -37,7 +44,7 @@ jobs:
             -d ''
 
       - name: Results Sync (every 5 min, today + yesterday)
-        if: steps.time.outputs.min % 5 == 0
+        if: steps.time.outputs.is_five_min == 'true'
         run: |
           # Sync today's results
           curl -s -X GET \
