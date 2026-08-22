@@ -7,6 +7,7 @@ on:
     - cron: '*/5 * * * *'       # Results sync every 5 minutes (24/7)
     - cron: '0 12 * * *'        # Pre-game 12:00 UTC (13:00 PT)
     - cron: '*/15 9-22 * * *'   # Live poll every 15min
+  workflow_dispatch:            # Manual trigger from GitHub UI
 
 jobs:
   sync:
