@@ -1,0 +1,518 @@
+# Tennis Predictor — Especificação inicial do projeto
+
+## 1. Objetivo
+
+Desenvolver uma aplicação web progressiva (PWA) para utilização pessoal, orientada para análise e previsão de jogos de ténis.
+
+A aplicação deverá utilizar:
+
+* Frontend: HTML5 + CSS3 + JavaScript
+* PWA instalável em Android e desktop
+* Backend/serverless: Supabase Edge Functions
+* Base de dados: Supabase PostgreSQL
+* Fonte de dados: Live Tennis API
+* Desenvolvimento no VS Code
+* Código preparado para funcionar em ambiente local e posteriormente em produção
+
+Não utilizar frameworks pesados no frontend nesta primeira fase. Manter a aplicação simples, modular e fácil de manter.
+
+---
+
+# 2. Objetivos funcionais
+
+A aplicação deverá permitir:
+
+1. Consultar jogos dos próximos 3 dias.
+2. Identificar os jogos do dia.
+3. Consultar resultados de jogos terminados.
+4. Apresentar informação dos jogadores.
+5. Apresentar estatísticas relevantes para previsão, quando disponíveis.
+6. Apresentar H2H quando os dados estiverem disponíveis.
+7. Apresentar odds quando a API/plano utilizado as disponibilizar.
+8. Calcular/apresentar probabilidades de vitória.
+9. Atribuir uma classificação de confiança a cada jogo.
+10. Guardar as previsões realizadas.
+11. Depois do resultado final, comparar previsão com resultado real.
+12. Permitir posteriormente avaliar a eficácia do sistema de previsão.
+13. Ter uma área de jogos LIVE, mas esta NÃO é a prioridade da aplicação.
+
+---
+
+# 3. Sistema de classificação
+
+A aplicação terá quatro níveis de confiança.
+
+|  Score | Classificação | Cor          |
+| -----: | ------------- | ------------ |
+|   0–49 | Incerto       | Vermelho     |
+|  50–59 | Perigoso      | Amarelo      |
+|  60–69 | Tendência     | Verde claro  |
+| 70–100 | Forte         | Verde escuro |
+
+É muito importante que o verde claro e o verde escuro sejam visualmente distintos.
+
+Usar, por exemplo:
+
+* Verde claro: #90EE90
+* Verde escuro: #006400
+
+Além da cor, apresentar sempre o nome textual da classificação e o score.
+
+Exemplo:
+
+"FORTE — 78/100"
+
+Nunca utilizar apenas a cor para transmitir informação.
+
+---
+
+# 4. Filosofia de utilização da API
+
+A aplicação utiliza a versão FREE da Live Tennis API.
+
+Limite conhecido:
+
+* 100 requests por dia
+* 30 requests por minuto
+
+O sistema deve assumir um limite operacional de 90 requests/dia, mantendo 10 requests como margem de segurança.
+
+Nunca ultrapassar os 100 requests/dia.
+
+O sistema NÃO deve distribuir obrigatoriamente 100 requests de forma uniforme ao longo do dia.
+
+Deve utilizar os requests de forma dinâmica, de acordo com a prioridade.
+
+---
+
+# 5. Prioridade dos requests
+
+A prioridade é:
+
+1. Jogos dos próximos 3 dias
+2. Jogos que começam nas próximas horas
+3. Dados necessários para construir previsões
+4. Odds/probabilidades, quando disponíveis
+5. Resultados de jogos que já terminaram
+6. Atualização de estatísticas
+7. Informação secundária
+8. Live scores
+
+O LIVE não deve consumir a maior parte da quota.
+
+Não fazer polling contínuo dos jogos LIVE.
+
+Se não houver necessidade, não fazer requests.
+
+Antes de cada chamada à API:
+
+1. verificar a utilização diária;
+2. verificar se o limite operacional de 90 foi atingido;
+3. verificar se os dados já existem em cache/base de dados;
+4. verificar quando foram atualizados pela última vez;
+5. determinar a prioridade;
+6. só então executar a chamada.
+
+---
+
+# 6. Estratégia temporal
+
+Se os primeiros jogos do dia começarem, por exemplo, às 15:00:
+
+Durante a manhã:
+
+* pesquisar/atualizar a lista de jogos;
+* preparar os jogos dos próximos 3 dias;
+* obter os dados necessários dos jogadores;
+* preparar os dados necessários para previsão.
+
+Antes das 15:00:
+
+* concentrar os requests nos jogos que começam nas próximas horas;
+* atualizar dados relevantes;
+* atualizar odds, quando disponíveis;
+* calcular/recalcular previsões.
+
+Depois das 15:00:
+
+* não fazer polling agressivo;
+* consultar resultados em blocos;
+* atualizar jogos terminados;
+* guardar os resultados;
+* comparar resultados com as previsões.
+
+No final do dia:
+
+* fechar resultados;
+* guardar desempenho das previsões;
+* preparar os dados para o dia seguinte.
+
+A aplicação deve ser concebida para que a PWA não precise de estar aberta para que estes processos aconteçam.
+
+---
+
+# 7. Arquitetura
+
+Arquitetura pretendida:
+
+Live Tennis API
+|
+v
+Supabase Edge Function
+|
+v
+Supabase PostgreSQL
+|
+v
+PWA HTML/CSS/JavaScript
+
+A PWA NÃO deve chamar diretamente a Live Tennis API para os processos automáticos.
+
+A API key da Live Tennis API deve ficar exclusivamente como segredo no ambiente seguro do Supabase Edge Function.
+
+Não colocar a API key no frontend.
+
+---
+
+# 8. Base de dados já existente
+
+A base de dados Supabase já foi criada.
+
+Existem atualmente estas 7 tabelas:
+
+## players
+
+Campos principais:
+
+* id
+* api_id
+* name
+* country
+* gender
+* ranking
+* ranking_points
+* hand
+* birth_date
+* photo_url
+* created_at
+* updated_at
+
+## tournaments
+
+* id
+* api_id
+* name
+* category
+* surface
+* country
+* start_date
+* end_date
+* created_at
+* updated_at
+
+## matches
+
+* id
+* api_id
+* tournament_id
+* scheduled_at
+* round
+* status
+* player1_id
+* player2_id
+* winner_id
+* score
+* best_of
+* surface
+* created_at
+* updated_at
+
+## match_predictions
+
+* id
+* match_id
+* created_at
+* player1_probability
+* player2_probability
+* confidence_score
+* confidence_level
+* predicted_winner_id
+* model_version
+* result
+* was_correct
+
+## odds
+
+* id
+* match_id
+* captured_at
+* player1_odd
+* player2_odd
+* source
+* market
+
+## api_usage
+
+* id
+* usage_date
+* requests_used
+* requests_reserved
+* last_request_at
+* created_at
+
+## api_requests
+
+* id
+* requested_at
+* endpoint
+* parameters
+* http_status
+* success
+* request_type
+* response_time_ms
+* error_message
+
+NÃO alterar, eliminar ou recriar estas tabelas sem autorização explícita.
+
+Se forem necessárias alterações à estrutura, primeiro explicar a necessidade e apresentar o SQL proposto.
+
+---
+
+# 9. Gestão dos requests
+
+Já existem funções PostgreSQL:
+
+* get_api_usage()
+* register_api_request()
+* can_make_api_request()
+
+A função can_make_api_request() utiliza 90 requests como limite operacional.
+
+A lógica de consumo da API deve ser centralizada.
+
+Não permitir que vários componentes façam chamadas independentes sem controlo da quota.
+
+Criar uma camada única responsável pelas chamadas à Live Tennis API.
+
+Cada request deve ser registado em api_requests.
+
+Registar:
+
+* endpoint
+* parâmetros
+* hora
+* status HTTP
+* sucesso/erro
+* tempo de resposta
+* tipo de request
+* mensagem de erro
+
+---
+
+# 10. Cache
+
+Antes de fazer qualquer chamada à API, verificar se os dados já estão disponíveis no Supabase e se continuam válidos.
+
+A aplicação deve privilegiar:
+
+PWA → Supabase
+
+em vez de:
+
+PWA → Live Tennis API
+
+A Live Tennis API deve ser usada apenas para atualizar os dados.
+
+---
+
+# 11. Primeira fase de desenvolvimento
+
+NÃO começar imediatamente pela interface completa.
+
+Primeiro implementar e testar apenas o backend de dados.
+
+Criar:
+
+/supabase/functions/
+
+com uma Edge Function responsável por comunicar com a Live Tennis API.
+
+Sugestão:
+
+/supabase/functions/update-tennis-data/
+
+Criar código modular para:
+
+* autenticação;
+* chamada HTTP à API;
+* controlo de quota;
+* tratamento de erros;
+* armazenamento de jogadores;
+* armazenamento de torneios;
+* armazenamento de jogos;
+* logging;
+* cache.
+
+---
+
+# 12. Primeira tarefa concreta
+
+Antes de escrever código:
+
+1. analisar a documentação/OpenAPI do repositório Live Tennis API;
+2. identificar os endpoints disponíveis no plano FREE;
+3. identificar exatamente quais campos cada endpoint fornece;
+4. identificar quais endpoints permitem obter os jogos dos próximos 3 dias;
+5. identificar como obter resultados;
+6. identificar como obter jogadores;
+7. identificar se estatísticas/H2H/odds/probabilidades estão disponíveis no FREE ou exigem plano superior;
+8. não assumir que um campo existe sem confirmar na documentação;
+9. produzir uma tabela:
+
+Endpoint | Plano | Dados | Nº esperado de requests | Utilidade
+
+Só depois dessa análise começar a implementação.
+
+---
+
+# 13. Primeira funcionalidade a implementar
+
+Implementar uma função de sincronização dos jogos dos próximos 3 dias.
+
+Objetivo:
+
+Live Tennis API
+→ obter jogos
+→ identificar jogadores
+→ identificar torneios
+→ inserir/atualizar players
+→ inserir/atualizar tournaments
+→ inserir/atualizar matches
+
+Utilizar os api_id como identificadores externos únicos.
+
+Não criar duplicados.
+
+A sincronização deve ser idempotente:
+
+Executar duas vezes não deve criar registos duplicados.
+
+---
+
+# 14. Teste inicial
+
+Criar uma forma de executar manualmente a sincronização em ambiente de desenvolvimento.
+
+O teste deve:
+
+1. consultar a API;
+2. mostrar quantos jogos foram encontrados;
+3. mostrar quantos jogadores foram criados/atualizados;
+4. mostrar quantos torneios foram criados/atualizados;
+5. mostrar quantos jogos foram criados/atualizados;
+6. mostrar quantos requests foram consumidos;
+7. registar tudo em api_requests.
+
+Não criar ainda o Cron automático.
+
+Primeiro provar que a sincronização funciona manualmente.
+
+---
+
+# 15. Segurança
+
+Nunca colocar no Git:
+
+* API key da Live Tennis API
+* Supabase secret key
+* service_role key
+* passwords
+* tokens
+
+Utilizar:
+
+.env
+
+para desenvolvimento local.
+
+Utilizar Supabase Secrets para Edge Functions.
+
+Criar:
+
+.env.example
+
+sem valores secretos.
+
+Exemplo:
+
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+LIVE_TENNIS_API_KEY=
+
+O ficheiro .env deve estar no .gitignore.
+
+---
+
+# 16. Git
+
+Criar um projeto Git.
+
+Estrutura inicial sugerida:
+
+/tennis-predictor
+
+```
+/supabase
+    /functions
+        /update-tennis-data
+
+/src
+    /css
+    /js
+
+/public
+
+.env.example
+.gitignore
+README.md
+```
+
+Não criar uma arquitetura excessivamente complexa.
+
+---
+
+# 17. Regras para o agente de desenvolvimento
+
+IMPORTANTE:
+
+* Não inventar endpoints da Live Tennis API.
+* Não inventar campos que não estejam na documentação.
+* Não assumir que funcionalidades PRO/ULTRA estão disponíveis no FREE.
+* Antes de implementar uma funcionalidade da API, verificar a especificação OpenAPI.
+* Não modificar a base de dados sem explicar primeiro.
+* Não instalar frameworks ou dependências desnecessárias.
+* Priorizar código simples, modular e legível.
+* Explicar alterações importantes.
+* Depois de cada etapa, indicar como testar.
+* Não avançar automaticamente para a etapa seguinte sem que a etapa atual esteja funcional.
+
+O projeto deve ser construído incrementalmente.
+
+# Estado atual
+
+A base de dados Supabase já foi criada e as 7 tabelas existem.
+
+O próximo objetivo é apenas:
+
+**analisar a API → implementar sincronização dos jogos dos próximos 3 dias → testar → confirmar que os dados chegam corretamente ao Supabase.**
+
+Não implementar ainda:
+
+* interface completa;
+* sistema de previsão final;
+* Cron;
+* notificações;
+* autenticação de utilizadores;
+* live avançado.
+
+Essas funcionalidades serão implementadas posteriormente.

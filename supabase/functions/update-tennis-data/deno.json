@@ -1,0 +1,8 @@
+{
+    "tasks": {
+        "test-sync": "deno run --allow-net --allow-env --allow-read test/sync-test.ts"
+    },
+    "imports": {
+        "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
+    }
+}

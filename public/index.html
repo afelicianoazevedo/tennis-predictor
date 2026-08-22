@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Tennis Predictor - Análise e previsão de jogos de ténis">
+    <title>Tennis Predictor</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-content">
+                <h1><span class="logo">🎾</span> Tennis Predictor</h1>
+                <button id="install-btn" class="btn-install" style="display: none;">
+                    <span>⬇</span> Instalar
+                </button>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab active" data-tab="today">
+                <span class="tab-icon">📅</span>
+                <span class="tab-label">Hoje</span>
+            </button>
+            <button class="tab" data-tab="upcoming">
+                <span class="tab-icon">📋</span>
+                <span class="tab-label">Próximos</span>
+            </button>
+            <button class="tab" data-tab="results">
+                <span class="tab-icon">🏆</span>
+                <span class="tab-label">Resultados</span>
+            </button>
+            <button class="tab" data-tab="predictions">
+                <span class="tab-icon">🎯</span>
+                <span class="tab-label">Previsões</span>
+            </button>
+            <button class="tab" data-tab="stats">
+                <span class="tab-icon">📊</span>
+                <span class="tab-label">Stats</span>
+            </button>
+        </nav>
+
+        <div class="filters">
+            <button class="filter active" data-filter="all">Todos</button>
+            <button class="filter" data-filter="men">♂ Homens</button>
+            <button class="filter" data-filter="women">♀ Mulheres</button>
+            <button class="filter" data-filter="doubles">⇄ Pares</button>
+        </div>
+
+        <main class="content">
+            <section id="tab-today" class="panel active">
+                <div id="today-matches" class="matches"></div>
+            </section>
+            <section id="tab-upcoming" class="panel">
+                <div id="upcoming-matches" class="matches"></div>
+            </section>
+            <section id="tab-results" class="panel">
+                <div id="results-matches" class="matches"></div>
+            </section>
+            <section id="tab-predictions" class="panel">
+                <div id="predictions-matches" class="matches"></div>
+            </section>
+            <section id="tab-stats" class="panel">
+                <div id="stats-panel" class="stats"></div>
+            </section>
+        </main>
+
+        <div id="modal" class="modal">
+            <div class="modal-box">
+                <button class="modal-close">&times;</button>
+                <div id="modal-content"></div>
+            </div>
+        </div>
+
+        <div id="loader" class="loader"></div>
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
