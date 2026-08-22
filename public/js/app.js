@@ -68,10 +68,17 @@ async function loadResults() {
 
 async function loadStats(period = 'all') {
     let start = null;
+    let end = null;
     const now = new Date();
 
     if (period === 'day') {
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    } else if (period === 'yesterday') {
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()).toISOString();
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     } else if (period === 'week') {
         const day = now.getDay();
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
@@ -85,13 +92,15 @@ async function loadStats(period = 'all') {
     }
 
     const predictions = await api('match_predictions', {
-        select: 'id,was_correct,created_at',
-        ...(start ? { gte: { created_at: start } } : {})
+        select: 'id,was_correct,created_at,confidence_score',
+        ...(start ? { gte: { created_at: start } } : {}),
+        ...(end ? { lt: { created_at: end } } : {})
     });
 
     const matches = await api('matches', {
         select: 'id,status,scheduled_at',
-        ...(start ? { gte: { scheduled_at: start } } : {})
+        ...(start ? { gte: { scheduled_at: start } } : {}),
+        ...(end ? { lt: { scheduled_at: end } } : {})
     });
 
     const today = now.toISOString().split('T')[0];
@@ -105,7 +114,25 @@ async function loadStats(period = 'all') {
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
     const wrongPct = withPredictions > 0 ? Math.round((wrong / withPredictions) * 100) : 0;
 
-    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length };
+    const trendStats = {
+        incerto: { total: 0, correct: 0, wrong: 0 },
+        perigoso: { total: 0, correct: 0, wrong: 0 },
+        tendencia: { total: 0, correct: 0, wrong: 0 },
+        forte: { total: 0, correct: 0, wrong: 0 }
+    };
+
+    predictions.forEach(p => {
+        if (!p.was_correct || !p.confidence_score) return;
+        let level = 'incerto';
+        if (p.confidence_score >= 50) level = 'perigoso';
+        if (p.confidence_score >= 60) level = 'tendencia';
+        if (p.confidence_score >= 70) level = 'forte';
+        trendStats[level].total++;
+        if (p.was_correct === true) trendStats[level].correct++;
+        if (p.was_correct === false) trendStats[level].wrong++;
+    });
+
+    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length, trendStats };
 }
 
 function time(d) {
@@ -274,6 +301,7 @@ function showStats(s) {
         <div class="stats-period">
             <button class="period-btn active" data-period="all">Todos</button>
             <button class="period-btn" data-period="day">Hoje</button>
+            <button class="period-btn" data-period="yesterday">Ontem</button>
             <button class="period-btn" data-period="week">Semana</button>
             <button class="period-btn" data-period="month">Mês</button>
             <button class="period-btn" data-period="year">Ano</button>
@@ -304,9 +332,17 @@ function showStats(s) {
         <div class="chart-container">
             <canvas id="accuracy-chart"></canvas>
         </div>
+        <div class="trend-stats-section">
+            <h4>Acertos por Tendência</h4>
+            <div class="trend-panels">
+                ${renderTrendPanels(s.trendStats)}
+            </div>
+        </div>
+        <div id="trend-charts" class="trend-charts"></div>
     `;
 
     renderAccuracyChart(s.correct, s.wrong, accuracy, wrongPct);
+    renderTrendCharts(s.trendStats);
 
     el.querySelectorAll('.period-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
@@ -318,6 +354,108 @@ function showStats(s) {
                 showStats(newStats);
             } catch (e) {
                 toast('Erro: ' + e.message);
+            }
+        });
+    });
+}
+
+function renderTrendPanels(trendStats) {
+    const levels = [
+        { key: 'incerto', label: 'Incerco', class: 'uncertain' },
+        { key: 'perigoso', label: 'Perigoso', class: 'dangerous' },
+        { key: 'tendencia', label: 'Tendência', class: 'tendency' },
+        { key: 'forte', label: 'Forte', class: 'strong' }
+    ];
+
+    return levels.map(level => {
+        const data = trendStats[level.key] || { total: 0, correct: 0, wrong: 0 };
+        const accuracy = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
+        const wrongPct = data.total > 0 ? Math.round((data.wrong / data.total) * 100) : 0;
+
+        return `
+            <div class="trend-panel ${level.class}">
+                <div class="trend-header">
+                    <span class="trend-label">${level.label}</span>
+                    <span class="trend-total">${data.total} previsões</span>
+                </div>
+                <div class="trend-stats">
+                    <div class="trend-stat correct">
+                        <span class="trend-value">${data.correct}</span>
+                        <span class="trend-pct">${accuracy}%</span>
+                    </div>
+                    <div class="trend-stat wrong">
+                        <span class="trend-value">${data.wrong}</span>
+                        <span class="trend-pct">${wrongPct}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderTrendCharts(trendStats) {
+    const levels = [
+        { key: 'incerto', label: 'Incerco', color: '#f59e0b' },
+        { key: 'perigoso', label: 'Perigoso', color: '#f97316' },
+        { key: 'tendencia', label: 'Tendência', color: '#3b82f6' },
+        { key: 'forte', label: 'Forte', color: '#22c55e' }
+    ];
+
+    const container = document.getElementById('trend-charts');
+    if (!container) return;
+    container.innerHTML = '';
+
+    levels.forEach(level => {
+        const data = trendStats[level.key] || { total: 0, correct: 0, wrong: 0 };
+        const canvas = document.createElement('canvas');
+        canvas.id = `trend-chart-${level.key}`;
+        canvas.style.maxWidth = '300px';
+        canvas.style.margin = '0 auto 16px';
+        container.appendChild(canvas);
+
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: ['Acertos', 'Falhas'],
+                datasets: [{
+                    label: level.label,
+                    data: [data.correct, data.wrong],
+                    backgroundColor: ['#22c55e', '#ef4444'],
+                    borderRadius: 6,
+                    barThickness: 24
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: level.label,
+                        color: '#f1f5f9',
+                        font: { size: 14 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = data.correct + data.wrong;
+                                const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
+                                return `${context.raw} (${pct}%)`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1, color: '#94a3b8' },
+                        grid: { color: '#334155' }
+                    },
+                    x: {
+                        ticks: { color: '#f1f5f9' },
+                        grid: { display: false }
+                    }
+                }
             }
         });
     });

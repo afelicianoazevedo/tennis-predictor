@@ -440,6 +440,115 @@ body {
     margin: 16px auto 0;
 }
 
+.trend-stats-section {
+    margin-top: 16px;
+}
+
+.trend-stats-section h4 {
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.trend-panels {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.trend-panel {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 14px;
+    border-left: 3px solid var(--border);
+}
+
+.trend-panel.uncertain { border-left-color: var(--c-uncertain); }
+.trend-panel.dangerous { border-left-color: var(--c-dangerous); }
+.trend-panel.tendency { border-left-color: var(--c-tendency); }
+.trend-panel.strong { border-left-color: var(--c-strong); }
+
+.trend-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.trend-label {
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.trend-total {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.trend-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.trend-stat {
+    text-align: center;
+    padding: 8px;
+    border-radius: 6px;
+    background: var(--bg);
+}
+
+.trend-stat.correct {
+    border: 1px solid #22c55e40;
+}
+
+.trend-stat.wrong {
+    border: 1px solid #ef444440;
+}
+
+.trend-value {
+    display: block;
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+.trend-stat.correct .trend-value {
+    color: #22c55e;
+}
+
+.trend-stat.wrong .trend-value {
+    color: #ef4444;
+}
+
+.trend-pct {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+}
+
+.trend-charts {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+
+.trend-charts canvas {
+    max-height: 200px;
+}
+
+@media (min-width: 768px) {
+    .trend-panels {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    .trend-charts {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
 /* Modal */
 .modal {
     display: none;
