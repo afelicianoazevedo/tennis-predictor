@@ -2,11 +2,11 @@ name: Tennis Predictor Sync
 
 on:
   schedule:
-    - cron: '0 7 * * *'        # Morning sync 07:00 UTC (08:00 PT)
-    - cron: '15 7 * * *'       # Generate predictions 07:15 UTC
-    - cron: '0 12 * * *'       # Pre-game 12:00 UTC (13:00 PT)
-    - cron: '*/15 9-22 * * *'  # Live poll every 15min
-    - cron: '30 23 * * *'      # Post-game 23:30 UTC (00:30 PT)
+    - cron: '0 7 * * *'         # Morning sync 07:00 UTC (08:00 PT)
+    - cron: '15 7 * * *'        # Generate predictions 07:15 UTC
+    - cron: '*/5 * * * *'       # Results sync every 5 minutes (24/7)
+    - cron: '0 12 * * *'        # Pre-game 12:00 UTC (13:00 PT)
+    - cron: '*/15 9-22 * * *'   # Live poll every 15min
 
 jobs:
   sync:
@@ -36,6 +36,18 @@ jobs:
             -H "Content-Type: application/json" \
             -d ''
 
+      - name: Results Sync (every 5 min, today + yesterday)
+        if: steps.time.outputs.min % 5 == 0
+        run: |
+          # Sync today's results
+          curl -s -X GET \
+            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=results&date=$(date -u +%Y-%m-%d)" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+          # Also sync yesterday's results (late finishes)
+          curl -s -X GET \
+            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=results&date=$(date -u -d 'yesterday' +%Y-%m-%d)" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+
       - name: Pre-Game Sync
         if: steps.time.outputs.hour == '12' && steps.time.outputs.min == '00'
         run: |
@@ -48,11 +60,4 @@ jobs:
         run: |
           curl -s -X GET \
             "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=live" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
-
-      - name: Post-Game Sync
-        if: steps.time.outputs.hour == '23' && steps.time.outputs.min == '30'
-        run: |
-          curl -s -X GET \
-            "https://ywmrxvurnxgnmpcjnisi.supabase.co/functions/v1/update-tennis-data?mode=post_game" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
