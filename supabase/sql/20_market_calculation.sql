@@ -93,7 +93,7 @@ begin
     INTO odds_record
     FROM public.odds o
     WHERE o.match_id = p_match_id
-      AND o.captured_at < p_before_date
+      AND (p_before_date IS NULL OR o.captured_at < p_before_date)
     ORDER BY o.captured_at DESC
     LIMIT 1;
 
