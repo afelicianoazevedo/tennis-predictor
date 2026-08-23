@@ -251,6 +251,47 @@ async function syncMatches(): Promise<any> {
     return result;
 }
 
+async function cleanupStaleLiveMatches(): Promise<{ cleaned: number; errors: string[] }> {
+    const cutoff = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+
+    const { data: stale, error: fetchError } = await supabase
+        .from("matches")
+        .select("id, scheduled_at, player1_id, player2_id, score")
+        .eq("status", "live")
+        .lt("updated_at", cutoff)
+        .limit(100);
+
+    if (fetchError) {
+        return { cleaned: 0, errors: [fetchError.message] };
+    }
+
+    if (!stale || stale.length === 0) {
+        return { cleaned: 0, errors: [] };
+    }
+
+    let cleaned = 0;
+    const errors: string[] = [];
+
+    for (const match of stale) {
+        const { error: updateError } = await supabase
+            .from("matches")
+            .update({
+                status: "completed",
+                status_text: "Ended",
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", match.id);
+
+        if (updateError) {
+            errors.push(`Cleanup ${match.id}: ${updateError.message}`);
+        } else {
+            cleaned++;
+        }
+    }
+
+    return { cleaned, errors };
+}
+
 // ============================================================
 // HANDLER PRINCIPAL
 // ============================================================
@@ -262,6 +303,9 @@ Deno.serve(async (req: Request) => {
     try {
         if (mode === "sync") {
             const result = await syncMatches();
+            const cleanup = await cleanupStaleLiveMatches();
+            result.cleaned_live = cleanup.cleaned;
+            result.cleanup_errors = cleanup.errors;
             return new Response(JSON.stringify({ status: "success", mode, result }, null, 2), {
                 status: 200,
                 headers: { "Content-Type": "application/json" },
@@ -271,6 +315,9 @@ Deno.serve(async (req: Request) => {
         if (mode === "results") {
             // Mantém compatibilidade - sincroniza tudo
             const result = await syncMatches();
+            const cleanup = await cleanupStaleLiveMatches();
+            result.cleaned_live = cleanup.cleaned;
+            result.cleanup_errors = cleanup.errors;
             return new Response(JSON.stringify({ status: "success", mode, result }, null, 2), {
                 status: 200,
                 headers: { "Content-Type": "application/json" },
