@@ -35,7 +35,7 @@ const TOUR_SELECT = 'tournament:tournaments(name)';
 
 async function loadLive() {
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'live' }, order: 'scheduled_at.asc'
     });
 }
@@ -43,9 +43,8 @@ async function loadLive() {
 async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
-    // Only show upcoming games for today (not live, not completed)
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
@@ -54,9 +53,8 @@ async function loadToday() {
 async function loadUpcoming() {
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
-    // Only show future games (not today)
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200
     });
 }
@@ -64,7 +62,7 @@ async function loadUpcoming() {
 async function loadResults() {
     const week = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
     return data.filter(m => m.score && m.score !== '0-0');
@@ -274,6 +272,19 @@ function showModal(m) {
     const favLabel = p1Fav ? p1.name : (p2Fav ? p2.name : null);
     const showResult = m.status === 'completed' && m.score;
 
+    const setsHtml = (m.sets && m.status === 'completed') ? (() => {
+        const setList = m.sets.split(',').map(s => s.trim()).filter(Boolean);
+        return setList.map(set => {
+            const parts = set.split('-');
+            if (parts.length !== 2) return `<div style="font-size:0.9rem;margin:2px 0">${set}</div>`;
+            const p1Set = parseInt(parts[0], 10);
+            const p2Set = parseInt(parts[1], 10);
+            const p1Bold = p1Set > p2Set ? 'font-weight:bold;' : '';
+            const p2Bold = p2Set > p1Set ? 'font-weight:bold;' : '';
+            return `<div style="font-size:0.9rem;margin:2px 0"><span style="${p1Bold}">${p1Set}</span>-<span style="${p2Bold}">${p2Set}</span></div>`;
+        }).join('');
+    })() : '';
+
     document.getElementById('modal-content').innerHTML = `
         <h3>${tour.name || 'Jogo'}</h3>
         <p style="color:var(--text-dim);margin:8px 0 16px">${date(m.scheduled_at)} ${time(m.scheduled_at)} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</p>
@@ -283,7 +294,10 @@ function showModal(m) {
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
                 ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
             </div>
-            <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
+            <div style="text-align:center">
+                <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
+                ${setsHtml}
+            </div>
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
