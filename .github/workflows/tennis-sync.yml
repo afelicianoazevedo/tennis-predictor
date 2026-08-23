@@ -9,17 +9,6 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Supabase CLI
-        run: npm install -g supabase
-
-      - name: Deploy Supabase Edge Function
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: |
-          supabase functions deploy update-tennis-data --project-ref ywmrxvurnxgnmpcjnisi
-
       - name: Sync matches from SportScore
         run: |
           curl -s -X GET \
