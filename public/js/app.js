@@ -13,9 +13,9 @@ function log(msg) {
 async function api(table, opts = {}) {
     const { select = '*', eq = {}, gte = {}, lte = {}, order = 'scheduled_at.asc', limit = 100 } = opts;
     const p = new URLSearchParams({ select, order, limit: limit.toString() });
-    Object.entries(eq).forEach(([k, v]) => p.set(k, `eq.${v}`));
-    Object.entries(gte).forEach(([k, v]) => p.set(k, `gte.${v}`));
-    Object.entries(lte).forEach(([k, v]) => p.set(k, `lte.${v}`));
+    Object.entries(eq).forEach(([k, v]) => p.set(`${k}=eq.${v}`));
+    Object.entries(gte).forEach(([k, v]) => p.set(`${k}=gte.${v}`));
+    Object.entries(lte).forEach(([k, v]) => p.set(`${k}=lte.${v}`));
 
     const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
     log('Fetching: ' + url);
