@@ -91,10 +91,25 @@ async function syncOdds(sport: string = "tennis"): Promise<{ success: boolean; m
             return { success: false, message: "ODDS_API_KEY not configured", matchesProcessed: 0 };
         }
 
+        const { data: rateCheck, error: rateError } = await supabase.rpc("can_make_api_request", {
+            p_api_name: "the_odds_api",
+            p_daily_limit: 15,
+            p_monthly_limit: 450
+        });
+
+        if (rateError || !rateCheck) {
+            return { success: false, message: "Rate limit exceeded for Odds API", matchesProcessed: 0 };
+        }
+
         const oddsData = await fetchOddsFromAPI(sport);
         if (!Array.isArray(oddsData) || oddsData.length === 0) {
             return { success: true, message: "No odds data available", matchesProcessed: 0 };
         }
+
+        await supabase.rpc("record_api_request", {
+            p_api_name: "the_odds_api",
+            p_count: 1
+        });
 
         const { data: matches } = await supabase
             .from("matches")
