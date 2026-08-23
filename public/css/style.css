@@ -314,6 +314,10 @@ body {
     margin-left: 6px;
 }
 
+.invisible {
+    visibility: hidden;
+}
+
 /* Stats period selector */
 .stats-period {
     display: flex;

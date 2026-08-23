@@ -197,6 +197,10 @@ function renderMatch(m) {
     const p2Prob = m.player2_probability;
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
+    const p1Confidence = p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p2Confidence = p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
+    const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
 
     return `
         <div class="match c-${cc} ${isLive ? 'is-live' : ''}" data-id="${m.id}">
@@ -209,10 +213,8 @@ function renderMatch(m) {
                             ${p1.name || 'TBD'}
                         </div>
                         <div class="player-info">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
-                        ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob}%</span>` : ''}
-                        ${p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : ''}
-                        ${p1Fav && isCompleted && wasCorrect === true ? '<span class="check result-icon">✓</span>' : ''}
-                        ${p1Fav && isCompleted && wasCorrect === false ? '<span class="cross result-icon">✗</span>' : ''}
+                        ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
+                        ${p1Result}
                     </div>
                     <div class="match-score-vs">${m.score || 'vs'}</div>
                     <div class="player">
@@ -220,10 +222,8 @@ function renderMatch(m) {
                             ${p2.name || 'TBD'}
                         </div>
                         <div class="player-info">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
-                        ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob}%</span>` : ''}
-                        ${p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : ''}
-                        ${p2Fav && isCompleted && wasCorrect === true ? '<span class="check result-icon">✓</span>' : ''}
-                        ${p2Fav && isCompleted && wasCorrect === false ? '<span class="cross result-icon">✗</span>' : ''}
+                        ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
+                        ${p2Result}
                     </div>
                 </div>
             </div>
