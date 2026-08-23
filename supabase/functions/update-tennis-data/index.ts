@@ -248,9 +248,14 @@ async function syncMatches(): Promise<any> {
             }
 
             if (status === "completed" && score && score !== "0-0" && existing?.id) {
-                await syncMatchStats(existing.id, p1Id, p2Id, match);
-                await syncH2H(p1Id, p2Id, match);
-                await syncPredictionFactors(existing.id, p1Id, p2Id, match);
+                try {
+                    await syncMatchStats(existing.id, p1Id, p2Id, match);
+                    await syncH2H(p1Id, p2Id, match);
+                    await syncPredictionFactors(existing.id, p1Id, p2Id, match);
+                    result.debug.push(`Synced: ${match.home} vs ${match.away}`);
+                } catch (e: any) {
+                    result.errors.push(`Sync ${match.home} vs ${match.away}: ${e.message}`);
+                }
             }
         } catch (e: any) {
             result.errors.push(`Match ${match.home} vs ${match.away}: ${e.message}`);
@@ -285,8 +290,27 @@ async function syncMatchStats(matchId: number, p1Id: number, p2Id: number, match
         source: 'sportscore',
     };
 
-    await supabase.from("match_player_stats").upsert(p1Stats, { onConflict: "match_id,player_id" });
-    await supabase.from("match_player_stats").upsert(p2Stats, { onConflict: "match_id,player_id" });
+    for (const stats of [p1Stats, p2Stats]) {
+        const { data: existing } = await supabase
+            .from("match_player_stats")
+            .select("id")
+            .eq("match_id", stats.match_id)
+            .eq("player_id", stats.player_id)
+            .maybeSingle();
+
+        if (existing) {
+            const { error } = await supabase
+                .from("match_player_stats")
+                .update({ ...stats, updated_at: new Date().toISOString() })
+                .eq("id", existing.id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase
+                .from("match_player_stats")
+                .insert({ ...stats, created_at: new Date().toISOString() });
+            if (error) throw error;
+        }
+    }
 }
 
 async function syncH2H(p1Id: number, p2Id: number, match: any): Promise<void> {
@@ -304,7 +328,7 @@ async function syncH2H(p1Id: number, p2Id: number, match: any): Promise<void> {
         .maybeSingle();
 
     if (existing) {
-        await supabase.from("player_h2h").update({
+        const { error } = await supabase.from("player_h2h").update({
             matches_played: (existing.matches_played || 0) + 1,
             player1_wins: (existing.player1_wins || 0) + p1Wins,
             player2_wins: (existing.player2_wins || 0) + p2Wins,
@@ -313,8 +337,9 @@ async function syncH2H(p1Id: number, p2Id: number, match: any): Promise<void> {
             last_match_at: match.time || new Date().toISOString(),
             updated_at: new Date().toISOString(),
         }).eq("id", existing.id);
+        if (error) throw error;
     } else {
-        await supabase.from("player_h2h").insert({
+        const { error } = await supabase.from("player_h2h").insert({
             player1_id: p1Id,
             player2_id: p2Id,
             matches_played: 1,
@@ -324,6 +349,7 @@ async function syncH2H(p1Id: number, p2Id: number, match: any): Promise<void> {
             player2_sets_won: awayScore,
             last_match_at: match.time || new Date().toISOString(),
         });
+        if (error) throw error;
     }
 }
 
@@ -336,7 +362,7 @@ async function syncPredictionFactors(matchId: number, p1Id: number, p2Id: number
 
     if (!prediction) return;
 
-    await supabase.from("match_prediction_factors").upsert({
+    const factors = {
         match_id: matchId,
         prediction_id: prediction.id,
         player1_strength_score: prediction.player1_probability,
@@ -359,7 +385,26 @@ async function syncPredictionFactors(matchId: number, p1Id: number, p2Id: number
         player2_context_score: prediction.player2_probability,
         agreement_score: prediction.confidence_score,
         data_quality_score: prediction.confidence_score,
-    }, { onConflict: "match_id" });
+    };
+
+    const { data: existing } = await supabase
+        .from("match_prediction_factors")
+        .select("id")
+        .eq("match_id", matchId)
+        .maybeSingle();
+
+    if (existing) {
+        const { error } = await supabase
+            .from("match_prediction_factors")
+            .update({ ...factors, updated_at: new Date().toISOString() })
+            .eq("id", existing.id);
+        if (error) throw error;
+    } else {
+        const { error } = await supabase
+            .from("match_prediction_factors")
+            .insert({ ...factors, created_at: new Date().toISOString() });
+        if (error) throw error;
+    }
 }
 
 async function syncAllPlayerPerformance(): Promise<void> {
@@ -399,7 +444,7 @@ async function syncAllPlayerPerformance(): Promise<void> {
         const winPct = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100, 2) : null;
         const setPct = setsWon + setsLost > 0 ? Math.round((setsWon / (setsWon + setsLost)) * 100, 2) : null;
 
-        await supabase.from("player_performance").upsert({
+        const perfData = {
             player_id: player.id,
             period_start: periodStart,
             period_end: periodEnd,
@@ -412,7 +457,29 @@ async function syncAllPlayerPerformance(): Promise<void> {
             set_percentage: setPct,
             ranking_at_period: player.ranking,
             updated_at: new Date().toISOString(),
-        }, { onConflict: "player_id,period_start,period_end,surface" });
+        };
+
+        const { data: existingPerf } = await supabase
+            .from("player_performance")
+            .select("id")
+            .eq("player_id", player.id)
+            .eq("period_start", periodStart)
+            .eq("period_end", periodEnd)
+            .is("surface", null)
+            .maybeSingle();
+
+        if (existingPerf) {
+            const { error } = await supabase
+                .from("player_performance")
+                .update(perfData)
+                .eq("id", existingPerf.id);
+            if (error) throw error;
+        } else {
+            const { error } = await supabase
+                .from("player_performance")
+                .insert(perfData);
+            if (error) throw error;
+        }
     }
 }
 
