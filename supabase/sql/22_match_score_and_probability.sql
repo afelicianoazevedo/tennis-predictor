@@ -8,6 +8,7 @@
 
 create or replace function public.get_model_weights()
 returns table (
+    ranking_weight numeric,
     strength_weight numeric,
     form_weight numeric,
     surface_weight numeric,
@@ -20,14 +21,15 @@ returns table (
 language plpgsql
 as $$
 begin
-    strength_weight := 0.20;
-    form_weight := 0.20;
-    surface_weight := 0.15;
-    serve_weight := 0.10;
-    return_weight := 0.10;
-    h2h_weight := 0.05;
-    market_weight := 0.10;
-    context_weight := 0.10;
+    ranking_weight := 0.20;
+    strength_weight := 0.16;
+    form_weight := 0.16;
+    surface_weight := 0.12;
+    serve_weight := 0.08;
+    return_weight := 0.08;
+    h2h_weight := 0.04;
+    market_weight := 0.08;
+    context_weight := 0.08;
     RETURN NEXT;
 END;
 $$;
@@ -90,6 +92,8 @@ returns table (
     player2_market_score numeric,
     player1_context_score numeric,
     player2_context_score numeric,
+    player1_ranking_score numeric,
+    player2_ranking_score numeric,
     agreement_score numeric,
     data_quality_score numeric
 )
@@ -113,6 +117,10 @@ declare
     context_record1 record;
     context_record2 record;
     weights record;
+    p1_ranking numeric;
+    p2_ranking numeric;
+    p1_ranking_score numeric;
+    p2_ranking_score numeric;
     p1_weighted_sum numeric := 0;
     p2_weighted_sum numeric := 0;
     total_weight numeric := 0;
@@ -173,6 +181,14 @@ begin
     -- Calcular Strength Score
     player1_strength_score := public.normalize_elo_score(p1_surface_elo, p2_surface_elo);
     player2_strength_score := 100 - player1_strength_score;
+
+    -- Calcular Ranking Score
+    SELECT coalesce(p.ranking_points, 0) INTO p1_ranking FROM public.players p WHERE p.id = p_player1_id;
+    SELECT coalesce(p.ranking_points, 0) INTO p2_ranking FROM public.players p WHERE p.id = p_player2_id;
+    
+    player1_ranking_score := 50 + (p1_ranking - p2_ranking) / 5;
+    player1_ranking_score := greatest(0, least(100, player1_ranking_score));
+    player2_ranking_score := 100 - player1_ranking_score;
 
     -- Obter Form Score
     SELECT * INTO form_record1 FROM public.get_player_form(p_player1_id, p_before_date);
@@ -267,6 +283,13 @@ begin
     END IF;
     agreement_count := agreement_count + 1;
 
+    IF player1_ranking_score IS NOT NULL AND player1_ranking_score > 50 THEN
+        agreement_total := agreement_total + 1;
+    ELSIF player1_ranking_score IS NOT NULL THEN
+        agreement_total := agreement_total + 0;
+    END IF;
+    agreement_count := agreement_count + 1;
+
     IF agreement_count > 0 THEN
         agreement_score := round((agreement_total::numeric / agreement_count) * 100, 2);
     ELSE
@@ -298,6 +321,11 @@ begin
     END IF;
 
     IF player1_h2h_score IS NOT NULL AND player2_h2h_score IS NOT NULL THEN
+        quality_score := quality_score + 10;
+        quality_count := quality_count + 1;
+    END IF;
+
+    IF player1_ranking_score IS NOT NULL AND player2_ranking_score IS NOT NULL THEN
         quality_score := quality_score + 10;
         quality_count := quality_count + 1;
     END IF;
@@ -382,6 +410,7 @@ declare
     surface text;
     scheduled_at timestamptz;
     match_scores record;
+    weights record;
     p1_advantage numeric;
     p2_advantage numeric;
     advantage_diff numeric;
@@ -408,49 +437,55 @@ begin
     END IF;
 
     SELECT * INTO match_scores FROM public.calculate_match_score(p1_id, p2_id, surface, scheduled_at, p_match_id);
+    SELECT * INTO weights FROM public.get_model_weights();
 
     -- Calcular vantagem ponderada
     p1_advantage := 0;
     p2_advantage := 0;
 
     IF match_scores.player1_strength_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_strength_score - 50) * 0.20;
-        p2_advantage := p2_advantage + (match_scores.player2_strength_score - 50) * 0.20;
+        p1_advantage := p1_advantage + (match_scores.player1_strength_score - 50) * weights.strength_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_strength_score - 50) * weights.strength_weight;
     END IF;
 
     IF match_scores.player1_form_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_form_score - 50) * 0.20;
-        p2_advantage := p2_advantage + (match_scores.player2_form_score - 50) * 0.20;
+        p1_advantage := p1_advantage + (match_scores.player1_form_score - 50) * weights.form_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_form_score - 50) * weights.form_weight;
     END IF;
 
     IF match_scores.player1_surface_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_surface_score - 50) * 0.15;
-        p2_advantage := p2_advantage + (match_scores.player2_surface_score - 50) * 0.15;
+        p1_advantage := p1_advantage + (match_scores.player1_surface_score - 50) * weights.surface_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_surface_score - 50) * weights.surface_weight;
     END IF;
 
     IF match_scores.player1_serve_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_serve_score - 50) * 0.10;
-        p2_advantage := p2_advantage + (match_scores.player2_serve_score - 50) * 0.10;
+        p1_advantage := p1_advantage + (match_scores.player1_serve_score - 50) * weights.serve_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_serve_score - 50) * weights.serve_weight;
     END IF;
 
     IF match_scores.player1_return_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_return_score - 50) * 0.10;
-        p2_advantage := p2_advantage + (match_scores.player2_return_score - 50) * 0.10;
+        p1_advantage := p1_advantage + (match_scores.player1_return_score - 50) * weights.return_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_return_score - 50) * weights.return_weight;
     END IF;
 
     IF match_scores.player1_h2h_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_h2h_score - 50) * 0.05;
-        p2_advantage := p2_advantage + (match_scores.player2_h2h_score - 50) * 0.05;
+        p1_advantage := p1_advantage + (match_scores.player1_h2h_score - 50) * weights.h2h_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_h2h_score - 50) * weights.h2h_weight;
+    END IF;
+
+    IF match_scores.player1_ranking_score IS NOT NULL THEN
+        p1_advantage := p1_advantage + (match_scores.player1_ranking_score - 50) * weights.ranking_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_ranking_score - 50) * weights.ranking_weight;
     END IF;
 
     IF match_scores.player1_market_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_market_score - 50) * 0.10;
-        p2_advantage := p2_advantage + (match_scores.player2_market_score - 50) * 0.10;
+        p1_advantage := p1_advantage + (match_scores.player1_market_score - 50) * weights.market_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_market_score - 50) * weights.market_weight;
     END IF;
 
     IF match_scores.player1_context_score IS NOT NULL THEN
-        p1_advantage := p1_advantage + (match_scores.player1_context_score - 50) * 0.10;
-        p2_advantage := p2_advantage + (match_scores.player2_context_score - 50) * 0.10;
+        p1_advantage := p1_advantage + (match_scores.player1_context_score - 50) * weights.context_weight;
+        p2_advantage := p2_advantage + (match_scores.player2_context_score - 50) * weights.context_weight;
     END IF;
 
     advantage_diff := p1_advantage - p2_advantage;
@@ -459,7 +494,7 @@ begin
     IF advantage_diff = 0 THEN
         SELECT coalesce(p.ranking_points, 0) INTO p1_ranking FROM public.players p WHERE p.id = p1_id;
         SELECT coalesce(p.ranking_points, 0) INTO p2_ranking FROM public.players p WHERE p.id = p2_id;
-        
+
         IF p1_ranking > p2_ranking THEN
             advantage_diff := 2.0;
         ELSIF p2_ranking > p1_ranking THEN

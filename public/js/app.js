@@ -147,11 +147,12 @@ function date(d) {
     return new Date(d).toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-function confClass(s) {
-    if (s == null) return '';
-    if (s < 50) return 'uncertain';
-    if (s < 60) return 'dangerous';
-    if (s < 70) return 'tendency';
+function confClass(prob, confidenceScore) {
+    if (prob == null && confidenceScore == null) return '';
+    const value = prob != null ? prob : confidenceScore;
+    if (value < 50) return 'uncertain';
+    if (value < 60) return 'dangerous';
+    if (value < 70) return 'tendency';
     return 'strong';
 }
 
@@ -185,7 +186,7 @@ function renderMatch(m) {
     const p2 = m.player2 || {};
     const tour = m.tournament || {};
     const cs = m.confidence_score;
-    const cc = confClass(cs);
+    const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
     const p1Fav = predId && p1.id === predId;
     const p2Fav = predId && p2.id === predId;
@@ -261,7 +262,7 @@ function showModal(m) {
     const p2 = m.player2 || {};
     const tour = m.tournament || {};
     const cs = m.confidence_score;
-    const cc = confClass(cs);
+    const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
     const p1Fav = predId && p1.id === predId;
     const p2Fav = predId && p2.id === predId;
@@ -292,7 +293,6 @@ function showModal(m) {
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p1.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
-                <div id="modal-odds-p1" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
                 ${p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
             </div>
             <div style="text-align:center">
@@ -302,7 +302,6 @@ function showModal(m) {
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
-                <div id="modal-odds-p2" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
                 ${p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
             </div>
         </div>
@@ -323,24 +322,10 @@ function showModal(m) {
     }
     
     if (m.id) {
-        Promise.all([
-            loadPredictionFactors(m.id),
-            loadOdds(m.id)
-        ]).then(([factors, odds]) => {
+        loadPredictionFactors(m.id).then(factors => {
             const factorsEl = document.getElementById('modal-factors');
             if (factorsEl) {
                 factorsEl.outerHTML = renderPredictionFactors(factors, p1.name, p2.name);
-            }
-            
-            if (odds) {
-                const oddsP1El = document.getElementById('modal-odds-p1');
-                const oddsP2El = document.getElementById('modal-odds-p2');
-                if (oddsP1El) {
-                    oddsP1El.outerHTML = renderOdds({ ...odds, player1_odd: odds.player1_odd });
-                }
-                if (oddsP2El) {
-                    oddsP2El.outerHTML = renderOdds({ ...odds, player2_odd: odds.player2_odd });
-                }
             }
         });
     }
@@ -610,30 +595,6 @@ async function loadPredictionFactors(matchId) {
         console.error('Error loading prediction factors:', e);
         return null;
     }
-}
-
-async function loadOdds(matchId) {
-    try {
-        const odds = await api('odds', {
-            select: 'player1_odd,player2_odd,market,source,captured_at',
-            eq: { match_id: matchId },
-            order: 'captured_at.desc',
-            limit: 1
-        });
-        return odds[0] || null;
-    } catch (e) {
-        console.error('Error loading odds:', e);
-        return null;
-    }
-}
-
-function renderOdds(odds) {
-    if (!odds || !odds.player1_odd || !odds.player2_odd) return '';
-    const p1Odd = Number(odds.player1_odd).toFixed(2);
-    const p2Odd = Number(odds.player2_odd).toFixed(2);
-    const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(1);
-    const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(1);
-    return `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">Odds: ${p1Odd} (${p1Prob}%) vs ${p2Odd} (${p2Prob}%)</div>`;
 }
 
 function renderFactorBar(label, p1Score, p2Score, p1Name, p2Name) {
