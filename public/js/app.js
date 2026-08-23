@@ -270,6 +270,9 @@ function showModal(m) {
     const p1Prob = m.player1_probability;
     const p2Prob = m.player2_probability;
 
+    const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
+    const favLabel = p1Fav ? p1.name : (p2Fav ? p2.name : null);
+
     document.getElementById('modal-content').innerHTML = `
         <h3>${tour.name || 'Jogo'}</h3>
         <p style="color:var(--text-dim);margin:8px 0 16px">${date(m.scheduled_at)} ${time(m.scheduled_at)} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</p>
@@ -277,15 +280,16 @@ function showModal(m) {
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p1.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
-                ${p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
+                ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
             </div>
             <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">VS</div>
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
-                ${p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
+                ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
             </div>
         </div>
+        ${favProb != null && favLabel ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Confiança no favorito ${favLabel}: <strong>${Math.round(favProb)}%</strong></div>` : ''}
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         ${m.score ? `<div style="text-align:center;font-size:1.3rem;font-weight:bold;color:var(--accent);margin-bottom:12px">${m.score}</div>` : ''}
         <div style="background:var(--bg);padding:12px;border-radius:8px;font-size:0.8rem">
