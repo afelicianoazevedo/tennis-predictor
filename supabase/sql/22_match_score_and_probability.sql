@@ -386,6 +386,8 @@ declare
     p2_advantage numeric;
     advantage_diff numeric;
     winner_id bigint;
+    p1_ranking numeric;
+    p2_ranking numeric;
 begin
     SELECT m.player1_id, m.player2_id, m.surface, m.scheduled_at
     INTO p1_id, p2_id, surface, scheduled_at
@@ -452,6 +454,20 @@ begin
     END IF;
 
     advantage_diff := p1_advantage - p2_advantage;
+
+    -- Tiebreaker: se vantagem for 0, usar ranking points ou ID do jogador
+    IF advantage_diff = 0 THEN
+        SELECT coalesce(p.ranking_points, 0) INTO p1_ranking FROM public.players p WHERE p.id = p1_id;
+        SELECT coalesce(p.ranking_points, 0) INTO p2_ranking FROM public.players p WHERE p.id = p2_id;
+        
+        IF p1_ranking > p2_ranking THEN
+            advantage_diff := 2.0;
+        ELSIF p2_ranking > p1_ranking THEN
+            advantage_diff := -2.0;
+        ELSE
+            advantage_diff := (p1_id - p2_id) * 1.0;
+        END IF;
+    END IF;
 
     -- Converter diferença em probabilidade
     SELECT * INTO player1_probability, player2_probability
