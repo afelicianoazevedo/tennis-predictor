@@ -197,8 +197,8 @@ function renderMatch(m) {
     const p2Prob = m.player2_probability;
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
-    const p1Confidence = p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p2Confidence = p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p1Confidence = p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p2Confidence = p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
