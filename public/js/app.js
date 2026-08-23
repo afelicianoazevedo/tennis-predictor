@@ -306,6 +306,9 @@ function showModal(m) {
         </div>
         ${favProb != null && favLabel ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Confiança no favorito ${favLabel}: <strong>${Math.round(favProb)}%</strong></div>` : ''}
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
+        <div id="modal-factors" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
+            <div class="factors-loading">A carregar fatores...</div>
+        </div>
         <div style="background:var(--bg);padding:12px;border-radius:8px;font-size:0.8rem">
             <p><strong>Estado:</strong> ${statusLabel(m.status)}</p>
             ${m.best_of ? `<p><strong>Formato:</strong> Melhor de ${m.best_of}</p>` : ''}
@@ -315,6 +318,15 @@ function showModal(m) {
 
     if (p1.id && p2.id) {
         loadH2H(p1.id, p2.id);
+    }
+    
+    if (m.id) {
+        loadPredictionFactors(m.id).then(factors => {
+            const factorsEl = document.getElementById('modal-factors');
+            if (factorsEl) {
+                factorsEl.outerHTML = renderPredictionFactors(factors, p1.name, p2.name);
+            }
+        });
     }
 }
 
@@ -569,6 +581,93 @@ async function loadH2H(id1, id2) {
     } catch (e) {
         console.error('Error loading H2H:', e);
     }
+}
+
+async function loadPredictionFactors(matchId) {
+    try {
+        const factors = await api('match_prediction_factors', {
+            select: '*',
+            eq: { match_id: matchId }
+        });
+        return factors[0] || null;
+    } catch (e) {
+        console.error('Error loading prediction factors:', e);
+        return null;
+    }
+}
+
+function renderFactorBar(label, p1Score, p2Score, p1Name, p2Name) {
+    if (p1Score === null && p2Score === null) return '';
+    
+    const p1 = p1Score !== null ? Math.round(p1Score) : 50;
+    const p2 = p2Score !== null ? Math.round(p2Score) : 50;
+    const total = p1 + p2;
+    const p1Width = total > 0 ? (p1 / total) * 100 : 50;
+    const p2Width = total > 0 ? (p2 / total) * 100 : 50;
+    
+    const showP1Val = p1Score !== null;
+    const showP2Val = p2Score !== null;
+    
+    return `
+        <div class="factor-row">
+            <div class="factor-label">${label}</div>
+            <div style="flex:1">
+                <div class="factor-bar-container">
+                    <div class="factor-bar-p1" style="width:${p1Width}%">
+                        ${showP1Val ? `<span>${p1}</span>` : ''}
+                    </div>
+                    <div class="factor-bar-p2" style="width:${p2Width}%">
+                        ${showP2Val ? `<span>${p2}</span>` : ''}
+                    </div>
+                </div>
+                <div class="factor-values">
+                    <div class="factor-value-p1">${showP1Val ? p1 : '-'}</div>
+                    <div class="factor-value-p2">${showP2Val ? p2 : '-'}</div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderPredictionFactors(factors, p1Name, p2Name) {
+    if (!factors) {
+        return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
+    }
+    
+    const factorsHtml = [
+        ['Força', factors.player1_strength_score, factors.player2_strength_score],
+        ['Forma', factors.player1_form_score, factors.player2_form_score],
+        ['Superfície', factors.player1_surface_score, factors.player2_surface_score],
+        ['Serve', factors.player1_serve_score, factors.player2_serve_score],
+        ['Return', factors.player1_return_score, factors.player2_return_score],
+        ['H2H', factors.player1_h2h_score, factors.player2_h2h_score],
+        ['Mercado', factors.player1_market_score, factors.player2_market_score],
+        ['Contexto', factors.player1_context_score, factors.player2_context_score]
+    ].map(([label, p1, p2]) => renderFactorBar(label, p1, p2, p1Name, p2Name)).filter(Boolean).join('');
+    
+    const agreement = factors.agreement_score !== null ? Math.round(factors.agreement_score) : null;
+    const dataQuality = factors.data_quality_score !== null ? Math.round(factors.data_quality_score) : null;
+    
+    return `
+        <div class="factors-section">
+            <div class="factors-title">📊 Fatores de Previsão</div>
+            ${factorsHtml}
+            <div class="factors-summary">
+                ${agreement !== null ? `
+                    <div class="factors-summary-row">
+                        <span class="factors-summary-label">Acordo</span>
+                        <span class="factors-summary-value">${agreement}%</span>
+                    </div>
+                ` : ''}
+                ${dataQuality !== null ? `
+                    <div class="factors-summary-row">
+                        <span class="factors-summary-label">Qualidade</span>
+                        <span class="factors-summary-value">${dataQuality}%</span>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
 }
 
 function toast(msg) {

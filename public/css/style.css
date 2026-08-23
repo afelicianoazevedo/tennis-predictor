@@ -595,6 +595,139 @@ body {
     color: var(--text);
 }
 
+/* Prediction Factors */
+.factors-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+
+.factors-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.factor-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.factor-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    width: 70px;
+    flex-shrink: 0;
+    text-transform: capitalize;
+}
+
+.factor-bar-container {
+    flex: 1;
+    display: flex;
+    height: 20px;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg);
+}
+
+.factor-bar-p1 {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 4px;
+}
+
+.factor-bar-p2 {
+    height: 100%;
+    background: var(--c-dangerous);
+    transition: width 0.3s;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 4px;
+}
+
+.factor-bar-p1 span,
+.factor-bar-p2 span {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: white;
+    white-space: nowrap;
+}
+
+.factor-values {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2px;
+}
+
+.factor-value-p1,
+.factor-value-p2 {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    width: 70px;
+    text-align: right;
+}
+
+.factor-value-p2 {
+    text-align: left;
+}
+
+.factor-divider {
+    width: 1px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+.factors-summary {
+    margin-top: 12px;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: 6px;
+    font-size: 0.75rem;
+}
+
+.factors-summary-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.factors-summary-row:last-child {
+    margin-bottom: 0;
+}
+
+.factors-summary-label {
+    color: var(--text-dim);
+}
+
+.factors-summary-value {
+    font-weight: 600;
+}
+
+.factors-loading {
+    text-align: center;
+    padding: 20px;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
+.factors-error {
+    text-align: center;
+    padding: 20px;
+    color: var(--c-uncertain);
+    font-size: 0.8rem;
+}
+
 /* Loader */
 .loader {
     display: none;
