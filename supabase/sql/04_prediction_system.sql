@@ -4,7 +4,7 @@
 
 -- ============================================================
 -- 1. FUNÇÃO: Calcular previsão para um jogo
--- Baseado na diferença de ranking entre jogadores
+-- Baseado em Elo com fallback para ranking
 -- ============================================================
 
 create or replace function public.calculate_match_prediction(p_match_id bigint)
@@ -18,12 +18,13 @@ returns table (
 language plpgsql
 as $$
 declare
+    p1_elo numeric;
+    p2_elo numeric;
     p1_ranking integer;
     p2_ranking integer;
     p1_points numeric;
     p2_points numeric;
-    rank_diff numeric;
-    total_rank numeric;
+    elo_diff numeric;
     p1_prob numeric;
     p2_prob numeric;
     conf_score numeric;
@@ -31,6 +32,7 @@ declare
     winner_id bigint;
     p1_id bigint;
     p2_id bigint;
+    use_elo boolean := false;
 begin
     -- Obter dados dos jogadores
     select m.player1_id, m.player2_id, p1.ranking, p2.ranking, p1.ranking_points, p2.ranking_points
@@ -40,32 +42,47 @@ begin
     left join public.players p2 on p2.id = m.player2_id
     where m.id = p_match_id;
 
-    -- Se não há dados de ranking suficientes
-    if p1_ranking is null and p2_ranking is null then
+    -- Tentar usar Elo se disponível
+    select coalesce(p1.elo_rating, 1500) into p1_elo from public.players p1 where p1.id = p1_id;
+    select coalesce(p2.elo_rating, 1500) into p2_elo from public.players p2 where p2.id = p2_id;
+
+    IF p1_elo IS NOT NULL AND p2_elo IS NOT NULL AND (p1_elo != 1500 OR p2_elo != 1500) THEN
+        use_elo := true;
+    END IF;
+
+    -- Se não há dados suficientes
+    if not use_elo and p1_ranking is null and p2_ranking is null then
         return query select 50.0::numeric, 50.0::numeric, 10.0::numeric, 'incerto'::text, null::bigint;
         return;
     end if;
 
-    -- Tratar rankings nulos (jogador sem ranking = pior que qualquer ranked)
-    if p1_ranking is null then p1_ranking = 2000; end if;
-    if p2_ranking is null then p2_ranking = 2000; end if;
+    IF use_elo THEN
+        -- Calcular probabilidades baseadas no Elo
+        elo_diff := p1_elo - p2_elo;
+        p1_prob := 1.0 / (1.0 + power(10, -elo_diff / 400.0));
+        p2_prob := 1.0 - p1_prob;
 
-    -- Calcular probabilidades baseadas no ranking
-    -- Fórmula: prob = (1 / ranking) / (1/r1 + 1/r2)
-    p1_prob = (1.0 / p1_ranking) / (1.0 / p1_ranking + 1.0 / p2_ranking);
-    p2_prob = 1.0 - p1_prob;
+        -- Converter para percentagem
+        p1_prob := round(p1_prob * 100, 2);
+        p2_prob := round(p2_prob * 100, 2);
 
-    -- Converter para percentagem
-    p1_prob = round(p1_prob * 100, 0);
-    p2_prob = round(p2_prob * 100, 0);
+        -- Calcular confiança baseada na diferença de Elo
+        conf_score := least(95, greatest(10, (abs(elo_diff) / 400.0) * 100 + 20));
+        conf_score := round(conf_score, 0);
+    ELSE
+        -- Fallback para ranking se Elo não disponível
+        if p1_ranking is null then p1_ranking = 2000; end if;
+        if p2_ranking is null then p2_ranking = 2000; end if;
 
-    -- Calcular confiança baseada na diferença de ranking
-    rank_diff = abs(p1_ranking - p2_ranking)::numeric;
-    total_rank = (p1_ranking + p2_ranking)::numeric;
+        p1_prob = (1.0 / p1_ranking) / (1.0 / p1_ranking + 1.0 / p2_ranking);
+        p2_prob = 1.0 - p1_prob;
 
-    -- Confiança: maior diferença = maior confiança
-    conf_score = least(95, greatest(10, (rank_diff / total_rank) * 200 + 30));
-    conf_score = round(conf_score, 0);
+        p1_prob = round(p1_prob * 100, 0);
+        p2_prob = round(p2_prob * 100, 0);
+
+        conf_score = least(95, greatest(10, (abs(p1_ranking - p2_ranking)::numeric / (p1_ranking + p2_ranking)::numeric) * 200 + 30));
+        conf_score = round(conf_score, 0);
+    END IF;
 
     -- Determinar nível de confiança
     if conf_score < 50 then
@@ -124,7 +141,7 @@ begin
         pred.confidence_score,
         pred.confidence_level,
         pred.predicted_winner_id,
-        'v1_ranking',
+        'v2_elo',
         now()
     )
     on conflict (match_id) do update set
@@ -210,8 +227,38 @@ $$;
 
 
 -- ============================================================
--- 5. TRIGGER: Atualizar was_correct quando resultado é conhecido
+-- 6. FUNÇÃO: Regenerar previsões para jogos live e upcoming
 -- ============================================================
+
+create or replace function public.regenerate_predictions_for_live_upcoming()
+returns integer
+language plpgsql
+as $$
+declare
+    match_record record;
+    count integer := 0;
+begin
+    FOR match_record IN
+        SELECT m.id
+        FROM public.matches m
+        WHERE m.status IN ('live', 'upcoming')
+          AND m.player1_id IS NOT NULL
+          AND m.player2_id IS NOT NULL
+    LOOP
+        PERFORM public.generate_prediction(match_record.id);
+        count := count + 1;
+    END LOOP;
+
+    RETURN count;
+end;
+$$;
+
+
+-- ============================================================
+-- 7. TRIGGER: Atualizar was_correct quando resultado é conhecido
+-- ============================================================
+
+DROP TRIGGER IF EXISTS trg_check_prediction ON public.matches;
 
 create or replace function public.check_prediction_result()
 returns trigger
@@ -238,7 +285,7 @@ end;
 $$;
 
 create trigger trg_check_prediction
-after update of winner_id on public.matches
-for each row
-when (new.winner_id is not null)
-execute function public.check_prediction_result();
+    after update of winner_id on public.matches
+    for each row
+    when (new.winner_id is not null)
+    execute function public.check_prediction_result();
