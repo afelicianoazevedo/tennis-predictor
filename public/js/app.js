@@ -201,6 +201,8 @@ function renderMatch(m) {
     const p2Confidence = p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
+    const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
+    const p2Info = `${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}`;
 
     return `
         <div class="match c-${cc} ${isLive ? 'is-live' : ''}" data-id="${m.id}">
@@ -212,7 +214,7 @@ function renderMatch(m) {
                         <div class="player-name">
                             ${p1.name || 'TBD'}
                         </div>
-                        <div class="player-info">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
+                        <div class="player-info">${p1Info}${!p1Info && p2Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p1Result}
                     </div>
@@ -221,7 +223,7 @@ function renderMatch(m) {
                         <div class="player-name">
                             ${p2.name || 'TBD'}
                         </div>
-                        <div class="player-info">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
+                        <div class="player-info">${p2Info}${!p2Info && p1Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p2Result}
                     </div>
