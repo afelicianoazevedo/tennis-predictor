@@ -186,14 +186,14 @@ function renderMatch(m) {
     const p2 = m.player2 || {};
     const tour = m.tournament || {};
     const cs = m.confidence_score;
+    const p1Prob = m.player1_probability;
+    const p2Prob = m.player2_probability;
     const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
     const p1Fav = predId && p1.id === predId;
     const p2Fav = predId && p2.id === predId;
     const isCompleted = m.status === 'completed';
     const isLive = m.status === 'live';
-    const p1Prob = m.player1_probability;
-    const p2Prob = m.player2_probability;
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
     const p1Confidence = p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
@@ -262,12 +262,12 @@ function showModal(m) {
     const p2 = m.player2 || {};
     const tour = m.tournament || {};
     const cs = m.confidence_score;
+    const p1Prob = m.player1_probability;
+    const p2Prob = m.player2_probability;
     const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
     const p1Fav = predId && p1.id === predId;
     const p2Fav = predId && p2.id === predId;
-    const p1Prob = m.player1_probability;
-    const p2Prob = m.player2_probability;
 
     const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
     const favLabel = p1Fav ? p1.name : (p2Fav ? p2.name : null);
