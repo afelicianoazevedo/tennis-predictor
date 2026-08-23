@@ -63,10 +63,11 @@ async function loadUpcoming() {
 
 async function loadResults() {
     const week = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
-    return api('matches', {
+    const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
+    return data.filter(m => m.score && m.score !== '0-0');
 }
 
 async function loadStats(period = 'all') {
