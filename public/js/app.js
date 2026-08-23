@@ -584,20 +584,18 @@ async function switchTab(tab) {
         return;
     }
 
-    if (!cachedData[tab]) {
-        loader(true);
-        try {
-            if (tab === 'live') cachedData[tab] = await loadLive();
-            else if (tab === 'today') cachedData[tab] = await loadToday();
-            else if (tab === 'upcoming') cachedData[tab] = await loadUpcoming();
-            else if (tab === 'results') cachedData[tab] = await loadResults();
-            log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + tab);
-        } catch (e) {
-            log('ERROR loading ' + tab + ': ' + e.message);
-            toast('Erro: ' + e.message);
-        } finally {
-            loader(false);
-        }
+    loader(true);
+    try {
+        if (tab === 'live') cachedData[tab] = await loadLive();
+        else if (tab === 'today') cachedData[tab] = await loadToday();
+        else if (tab === 'upcoming') cachedData[tab] = await loadUpcoming();
+        else if (tab === 'results') cachedData[tab] = await loadResults();
+        log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + tab);
+    } catch (e) {
+        log('ERROR loading ' + tab + ': ' + e.message);
+        toast('Erro: ' + e.message);
+    } finally {
+        loader(false);
     }
 
     if (tab !== 'stats') {
