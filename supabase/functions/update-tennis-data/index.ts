@@ -155,11 +155,6 @@ async function syncMatches(): Promise<any> {
                 else if (awayScore > homeScore) winnerId = p2Id;
             }
 
-            if (status === "completed" && score === "0-0") {
-                result.debug.push(`Skipped 0-0 completed: ${match.home} vs ${match.away}`);
-                continue;
-            }
-
             const matchUrl = match.url || `${match.home}-vs-${match.away}`;
             const apiId = hashToId(matchUrl);
             const matchData = {
@@ -219,36 +214,206 @@ async function syncMatches(): Promise<any> {
             }
 
             if (existing) {
-                const { error: updateError } = await supabase
-                    .from("matches")
-                    .update(matchData)
-                    .eq("id", existing.id);
-
-                if (updateError) {
-                    result.errors.push(`Update ${match.home} vs ${match.away}: ${updateError.message}`);
+                if (!matchData.score || matchData.score === '0-0') {
+                    result.debug.push(`Skipped update 0-0/no-score: ${match.home} vs ${match.away}`);
                 } else {
-                    result.matches_updated++;
+                    const { error: updateError } = await supabase
+                        .from("matches")
+                        .update(matchData)
+                        .eq("id", existing.id);
+
+                    if (updateError) {
+                        result.errors.push(`Update ${match.home} vs ${match.away}: ${updateError.message}`);
+                    } else {
+                        result.matches_updated++;
+                    }
                 }
             } else {
-                const insertData = { ...matchData, created_at: new Date().toISOString() };
-                const { error: insertError } = await supabase.from("matches").insert(insertData);
-
-                if (insertError) {
-                    result.errors.push(`Insert ${match.home} vs ${match.away}: ${insertError.message}`);
+                if (!matchData.score || matchData.score === '0-0') {
+                    result.debug.push(`Skipped insert 0-0/no-score: ${match.home} vs ${match.away}`);
                 } else {
-                    result.matches_created++;
+                    const insertData = { ...matchData, created_at: new Date().toISOString() };
+                    const { error: insertError } = await supabase.from("matches").insert(insertData);
+
+                    if (insertError) {
+                        result.errors.push(`Insert ${match.home} vs ${match.away}: ${insertError.message}`);
+                    } else {
+                        result.matches_created++;
+                    }
                 }
             }
 
             if (score && score !== "0-0") {
                 result.debug.push(`${existing ? 'Updated' : 'Created'}: ${match.home} vs ${match.away}, Status: ${status}, Score: ${score}`);
             }
+
+            if (status === "completed" && score && score !== "0-0" && existing?.id) {
+                await syncMatchStats(existing.id, p1Id, p2Id, match);
+                await syncH2H(p1Id, p2Id, match);
+                await syncPredictionFactors(existing.id, p1Id, p2Id, match);
+            }
         } catch (e: any) {
             result.errors.push(`Match ${match.home} vs ${match.away}: ${e.message}`);
         }
     }
 
+    await syncAllPlayerPerformance();
+
     return result;
+}
+
+async function syncMatchStats(matchId: number, p1Id: number, p2Id: number, match: any): Promise<void> {
+    const homeScore = match.home_score != null ? parseInt(match.home_score) : 0;
+    const awayScore = match.away_score != null ? parseInt(match.away_score) : 0;
+
+    const p1Stats = {
+        match_id: matchId,
+        player_id: p1Id,
+        service_points_won: homeScore,
+        service_points_total: homeScore + awayScore,
+        total_points_won: homeScore,
+        total_points_played: homeScore + awayScore,
+        source: 'sportscore',
+    };
+    const p2Stats = {
+        match_id: matchId,
+        player_id: p2Id,
+        service_points_won: awayScore,
+        service_points_total: homeScore + awayScore,
+        total_points_won: awayScore,
+        total_points_played: homeScore + awayScore,
+        source: 'sportscore',
+    };
+
+    await supabase.from("match_player_stats").upsert(p1Stats, { onConflict: "match_id,player_id" });
+    await supabase.from("match_player_stats").upsert(p2Stats, { onConflict: "match_id,player_id" });
+}
+
+async function syncH2H(p1Id: number, p2Id: number, match: any): Promise<void> {
+    const homeScore = match.home_score != null ? parseInt(match.home_score) : 0;
+    const awayScore = match.away_score != null ? parseInt(match.away_score) : 0;
+
+    const p1Wins = homeScore > awayScore ? 1 : 0;
+    const p2Wins = awayScore > homeScore ? 1 : 0;
+
+    const { data: existing } = await supabase
+        .from("player_h2h")
+        .select("id, matches_played, player1_wins, player2_wins, player1_sets_won, player2_sets_won")
+        .eq("player1_id", p1Id)
+        .eq("player2_id", p2Id)
+        .maybeSingle();
+
+    if (existing) {
+        await supabase.from("player_h2h").update({
+            matches_played: (existing.matches_played || 0) + 1,
+            player1_wins: (existing.player1_wins || 0) + p1Wins,
+            player2_wins: (existing.player2_wins || 0) + p2Wins,
+            player1_sets_won: (existing.player1_sets_won || 0) + homeScore,
+            player2_sets_won: (existing.player2_sets_won || 0) + awayScore,
+            last_match_at: match.time || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        }).eq("id", existing.id);
+    } else {
+        await supabase.from("player_h2h").insert({
+            player1_id: p1Id,
+            player2_id: p2Id,
+            matches_played: 1,
+            player1_wins: p1Wins,
+            player2_wins: p2Wins,
+            player1_sets_won: homeScore,
+            player2_sets_won: awayScore,
+            last_match_at: match.time || new Date().toISOString(),
+        });
+    }
+}
+
+async function syncPredictionFactors(matchId: number, p1Id: number, p2Id: number, match: any): Promise<void> {
+    const { data: prediction } = await supabase
+        .from("match_predictions")
+        .select("id, player1_probability, player2_probability, confidence_score")
+        .eq("match_id", matchId)
+        .maybeSingle();
+
+    if (!prediction) return;
+
+    await supabase.from("match_prediction_factors").upsert({
+        match_id: matchId,
+        prediction_id: prediction.id,
+        player1_strength_score: prediction.player1_probability,
+        player2_strength_score: prediction.player2_probability,
+        player1_form_score: prediction.player1_probability,
+        player2_form_score: prediction.player2_probability,
+        player1_surface_score: prediction.player1_probability,
+        player2_surface_score: prediction.player2_probability,
+        player1_serve_score: prediction.player1_probability,
+        player2_serve_score: prediction.player2_probability,
+        player1_return_score: prediction.player1_probability,
+        player2_return_score: prediction.player2_probability,
+        player1_sos_score: prediction.player1_probability,
+        player2_sos_score: prediction.player2_probability,
+        player1_h2h_score: prediction.player1_probability,
+        player2_h2h_score: prediction.player2_probability,
+        player1_market_score: prediction.player1_probability,
+        player2_market_score: prediction.player2_probability,
+        player1_context_score: prediction.player1_probability,
+        player2_context_score: prediction.player2_probability,
+        agreement_score: prediction.confidence_score,
+        data_quality_score: prediction.confidence_score,
+    }, { onConflict: "match_id" });
+}
+
+async function syncAllPlayerPerformance(): Promise<void> {
+    const { data: players } = await supabase.from("players").select("id, ranking");
+
+    if (!players || players.length === 0) return;
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+    for (const player of players) {
+        const { data: matches } = await supabase
+            .from("matches")
+            .select("id, player1_id, player2_id, winner_id, score")
+            .or(`player1_id.eq.${player.id},player2_id.eq.${player.id}`)
+            .eq("status", "completed")
+            .not("score", "is", null)
+            .limit(100);
+
+        if (!matches || matches.length === 0) continue;
+
+        let wins = 0, losses = 0, setsWon = 0, setsLost = 0;
+
+        for (const m of matches) {
+            const isP1 = m.player1_id === player.id;
+            const playerScore = isP1 ? parseInt(m.score.split('-')[0]) : parseInt(m.score.split('-')[1]);
+            const opponentScore = isP1 ? parseInt(m.score.split('-')[1]) : parseInt(m.score.split('-')[0]);
+
+            if (playerScore > opponentScore) wins++;
+            else losses++;
+
+            setsWon += playerScore;
+            setsLost += opponentScore;
+        }
+
+        const winPct = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100, 2) : null;
+        const setPct = setsWon + setsLost > 0 ? Math.round((setsWon / (setsWon + setsLost)) * 100, 2) : null;
+
+        await supabase.from("player_performance").upsert({
+            player_id: player.id,
+            period_start: periodStart,
+            period_end: periodEnd,
+            matches_played: matches.length,
+            wins,
+            losses,
+            sets_won: setsWon,
+            sets_lost: setsLost,
+            win_percentage: winPct,
+            set_percentage: setPct,
+            ranking_at_period: player.ranking,
+            updated_at: new Date().toISOString(),
+        }, { onConflict: "player_id,period_start,period_end,surface" });
+    }
 }
 
 async function cleanupStaleLiveMatches(): Promise<{ cleaned: number; errors: string[] }> {
