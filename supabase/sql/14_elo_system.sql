@@ -144,13 +144,7 @@ begin
       and elo_updated_at < p_before_date;
 
     if elo_val is null then
-        select elo_rating into elo_val
-        from public.players
-        where id = p_player_id;
-
-        if elo_val is null then
-            elo_val := 1500;
-        end if;
+        elo_val := 1500;
     end if;
 
     return greatest(100, least(3000, elo_val));

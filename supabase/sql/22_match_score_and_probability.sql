@@ -123,12 +123,36 @@ declare
     p1_prob numeric;
     p2_prob numeric;
 begin
-    -- Obter Elo
-    SELECT coalesce(elo_rating, 1500) INTO p1_elo FROM public.players WHERE id = p_player1_id;
-    SELECT coalesce(elo_rating, 1500) INTO p2_elo FROM public.players WHERE id = p_player2_id;
+    -- Obter Elo pré-jogo
+    IF p_before_date IS NOT NULL THEN
+        SELECT public.get_player_elo_before(p_player1_id, p_before_date) INTO p1_elo;
+        SELECT public.get_player_elo_before(p_player2_id, p_before_date) INTO p2_elo;
+    ELSE
+        SELECT coalesce(elo_rating, 1500) INTO p1_elo FROM public.players WHERE id = p_player1_id;
+        SELECT coalesce(elo_rating, 1500) INTO p2_elo FROM public.players WHERE id = p_player2_id;
+    END IF;
 
-    -- Obter Surface Elo se disponível
-    IF p_surface IS NOT NULL THEN
+    IF p1_elo IS NULL THEN p1_elo := 1500; END IF;
+    IF p2_elo IS NULL THEN p2_elo := 1500; END IF;
+
+    -- Obter Surface Elo pré-jogo
+    IF p_surface IS NOT NULL AND p_before_date IS NOT NULL THEN
+        SELECT coalesce(pp.elo_rating, p1_elo) INTO p1_surface_elo
+        FROM public.player_performance pp
+        WHERE pp.player_id = p_player1_id 
+          AND pp.surface = p_surface
+          AND pp.updated_at IS NOT NULL
+          AND pp.updated_at < p_before_date
+        ORDER BY pp.updated_at DESC LIMIT 1;
+
+        SELECT coalesce(pp.elo_rating, p2_elo) INTO p2_surface_elo
+        FROM public.player_performance pp
+        WHERE pp.player_id = p_player2_id 
+          AND pp.surface = p_surface
+          AND pp.updated_at IS NOT NULL
+          AND pp.updated_at < p_before_date
+        ORDER BY pp.updated_at DESC LIMIT 1;
+    ELSIF p_surface IS NOT NULL THEN
         SELECT coalesce(pp.elo_rating, p1_elo) INTO p1_surface_elo
         FROM public.player_performance pp
         WHERE pp.player_id = p_player1_id AND pp.surface = p_surface
@@ -460,12 +484,13 @@ begin
     ELSIF player2_probability > player1_probability THEN
         winner_id := p2_id;
     ELSE
-        winner_id := NULL;
+        winner_id := p1_id;
     END IF;
 
     model_version := 'v2_elo';
     agreement_score := match_scores.agreement_score;
     data_quality_score := match_scores.data_quality_score;
+    predicted_winner_id := winner_id;
 
     RETURN NEXT;
 END;
