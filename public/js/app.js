@@ -686,7 +686,7 @@ async function loadOdds(matchId, p1Name, p2Name) {
         }
         
         if (!odds || odds.length === 0) {
-            const orFilter = `player1_name.eq.${encodeURIComponent(p1Name)},player2_name.eq.${encodeURIComponent(p1Name)},player1_name.eq.${encodeURIComponent(p2Name)},player2_name.eq.${encodeURIComponent(p2Name)}`;
+            const orFilter = `(player1_name.eq.${encodeURIComponent(p1Name)},player2_name.eq.${encodeURIComponent(p1Name)},player1_name.eq.${encodeURIComponent(p2Name)},player2_name.eq.${encodeURIComponent(p2Name)})`;
             odds = await api('odds', {
                 select: 'player1_odd,player2_odd,market,source,captured_at',
                 or: orFilter,
