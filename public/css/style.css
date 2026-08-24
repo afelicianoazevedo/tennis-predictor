@@ -212,6 +212,7 @@ body {
     text-align: center;
     gap: 1px;
     padding: 6px 2px;
+    flex-shrink: 0;
 }
 
 .match-time-text {
