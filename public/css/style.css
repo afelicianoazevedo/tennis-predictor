@@ -201,11 +201,33 @@ body {
 .match.c-strong { border-left-color: var(--c-strong); }
 
 .match-time {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--accent);
     min-width: 45px;
     text-align: center;
+    gap: 1px;
+    padding: 6px 2px;
+}
+
+.match-time-text {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.match-date-short {
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--text);
+    display: block;
+    line-height: 1;
+    margin-bottom: 2px;
 }
 
 .match-body {

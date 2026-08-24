@@ -56,7 +56,8 @@ async function loadUpcoming() {
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
     return api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
-        gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200
+        gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
+        eq: { status: 'upcoming' }
     });
 }
 
@@ -148,6 +149,14 @@ function date(d) {
     return new Date(d).toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
+function dateShort(d) {
+    if (!d) return '';
+    const dt = new Date(d);
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    return `${day}/${month}`;
+}
+
 function confClass(prob, confidenceScore) {
     if (prob == null && confidenceScore == null) return '';
     const value = prob != null ? prob : confidenceScore;
@@ -197,18 +206,22 @@ function renderMatch(m) {
     const predId = m.predicted_winner_id;
     let p1Fav = predId && p1.id === predId;
     let p2Fav = predId && p2.id === predId;
-    
-    if (!predId && p1Prob != null && p2Prob != null) {
+
+    if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
+        p1Fav = false;
+        p2Fav = false;
+    } else if (!predId && p1Prob != null && p2Prob != null) {
         if (p1Prob > p2Prob) p1Fav = true;
         else if (p2Prob > p1Prob) p2Fav = true;
-        else if (p1Prob === p2Prob) p1Fav = true;
     }
     const isCompleted = m.status === 'completed';
     const isLive = m.status === 'live';
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
-    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p1Display = p1Prob != null ? p1Prob.toFixed(1) : null;
+    const p2Display = p2Prob != null ? p2Prob.toFixed(1) : null;
+    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${p1Display}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${p2Display}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
@@ -216,7 +229,11 @@ function renderMatch(m) {
 
     return `
         <div class="match c-${cc} ${isLive ? 'is-live' : ''}" data-id="${m.id}">
-            <div class="match-time">${time(m.scheduled_at)}${isLive ? '<br><span class="live-dot">●</span>' : ''}</div>
+            <div class="match-time">
+                <span class="match-date-short">${dateShort(m.scheduled_at)}</span>
+                <span class="match-time-text">${time(m.scheduled_at)}</span>
+                ${isLive ? '<span class="live-dot">●</span>' : ''}
+            </div>
             <div class="match-body">
                 <div class="match-tour">${tour.name || ''} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</div>
                 <div class="match-players">
@@ -225,7 +242,7 @@ function renderMatch(m) {
                             ${p1.name || 'TBD'}
                         </div>
                         <div class="player-info">${p1Info}${!p1Info && p2Info ? '<span class="player-info invisible">-</span>' : ''}</div>
-                        <div class="player-odds" style="font-size:0.7rem;color:var(--text-dim);display:none"></div>
+                        <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
                         ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p1Result}
                     </div>
@@ -235,7 +252,7 @@ function renderMatch(m) {
                             ${p2.name || 'TBD'}
                         </div>
                         <div class="player-info">${p2Info}${!p2Info && p1Info ? '<span class="player-info invisible">-</span>' : ''}</div>
-                        <div class="player-odds" style="font-size:0.7rem;color:var(--text-dim);display:none"></div>
+                        <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
                         ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p2Result}
                     </div>
@@ -283,10 +300,12 @@ async function attachOddsToMatches(matches, container) {
         if (p1OddsEl) {
             p1OddsEl.textContent = oddsText.p1;
             p1OddsEl.style.display = 'block';
+            p1OddsEl.style.color = '#fbbf24';
         }
         if (p2OddsEl) {
             p2OddsEl.textContent = oddsText.p2;
             p2OddsEl.style.display = 'block';
+            p2OddsEl.style.color = '#fbbf24';
         }
     }
 }
@@ -308,11 +327,13 @@ function showModal(m) {
     const predId = m.predicted_winner_id;
     let p1Fav = predId && p1.id === predId;
     let p2Fav = predId && p2.id === predId;
-    
-    if (!predId && p1Prob != null && p2Prob != null) {
+
+    if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
+        p1Fav = false;
+        p2Fav = false;
+    } else if (!predId && p1Prob != null && p2Prob != null) {
         if (p1Prob > p2Prob) p1Fav = true;
         else if (p2Prob > p1Prob) p2Fav = true;
-        else if (p1Prob === p2Prob) p1Fav = true;
     }
 
     const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
@@ -337,26 +358,26 @@ function showModal(m) {
         <p style="color:var(--text-dim);margin:8px 0 16px">${date(m.scheduled_at)} ${time(m.scheduled_at)} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</p>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px">
             <div style="text-align:center;flex:1">
-                <div style="font-weight:700;font-size:1rem">${p1.name || 'TBD'}</div>
-                <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
-                <div id="modal-odds-p1" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
-                ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
+                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p1.name || 'TBD'}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
+                <div id="modal-odds-p1" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
+                ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob.toFixed(1)}%</span>` : ''}
             </div>
             <div style="text-align:center">
                 <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
                 ${setsHtml}
             </div>
             <div style="text-align:center;flex:1">
-                <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
-                <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
-                <div id="modal-odds-p2" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
-                ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
+                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2.name || 'TBD'}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
+                <div id="modal-odds-p2" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
+                ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob.toFixed(1)}%</span>` : ''}
             </div>
         </div>
-        ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${Math.round(p1Prob)}%</strong> vs <strong>${Math.round(p2Prob)}%</strong></div>` : ''}
+        ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${p1Prob.toFixed(1)}%</strong> vs <strong>${p2Prob.toFixed(1)}%</strong></div>` : ''}
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         <div id="modal-factors" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
-            <div class="factors-loading">A carregar fatores...</div>
+            <div class="factors-loading">A carregar fatores de previsão e odds...</div>
         </div>
         <div style="background:var(--bg);padding:12px;border-radius:8px;font-size:0.8rem">
             <p><strong>Estado:</strong> ${statusLabel(m.status)}</p>
@@ -376,7 +397,7 @@ function showModal(m) {
         ]).then(([factors, odds]) => {
             const factorsEl = document.getElementById('modal-factors');
             if (factorsEl) {
-                factorsEl.outerHTML = renderPredictionFactors(factors, p1.name, p2.name);
+                factorsEl.outerHTML = renderPredictionFactors(factors, p1.name, p2.name, odds);
             }
             
             if (odds) {
@@ -659,8 +680,8 @@ async function loadPredictionFactors(matchId) {
 function renderFactorBar(label, p1Score, p2Score, p1Name, p2Name) {
     if (p1Score === null && p2Score === null) return '';
     
-    const p1 = p1Score !== null ? Math.round(p1Score) : 50;
-    const p2 = p2Score !== null ? Math.round(p2Score) : 50;
+    const p1 = p1Score !== null ? (p1Score > p2Score ? Math.ceil(p1Score) : Math.floor(p1Score)) : 50;
+    const p2 = p2Score !== null ? (p2Score > p1Score ? Math.ceil(p2Score) : Math.floor(p2Score)) : 50;
     const total = p1 + p2;
     const p1Width = total > 0 ? (p1 / total) * 100 : 50;
     const p2Width = total > 0 ? (p2 / total) * 100 : 50;
@@ -732,8 +753,29 @@ function renderOdds(odds) {
     };
 }
 
-function renderPredictionFactors(factors, p1Name, p2Name) {
+function renderPredictionFactors(factors, p1Name, p2Name, odds) {
     if (!factors) {
+        if (odds && odds.player1_odd && odds.player2_odd) {
+            const p1Odd = Number(odds.player1_odd).toFixed(2);
+            const p2Odd = Number(odds.player2_odd).toFixed(2);
+            const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(1);
+            const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(1);
+            return `
+                <div class="factors-section">
+                    <div class="factors-title">📊 Odds de Mercado</div>
+                    <div class="factors-summary">
+                        <div class="factors-summary-row">
+                            <span class="factors-summary-label">${p1Name}</span>
+                            <span class="factors-summary-value">${p1Odd} (${p1Prob}%)</span>
+                        </div>
+                        <div class="factors-summary-row">
+                            <span class="factors-summary-label">${p2Name}</span>
+                            <span class="factors-summary-value">${p2Odd} (${p2Prob}%)</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
         return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
     }
     
