@@ -11,11 +11,12 @@ function log(msg) {
 }
 
 async function api(table, opts = {}) {
-    const { select = '*', eq = {}, gte = {}, lte = {}, order = 'scheduled_at.asc', limit = 100 } = opts;
+    const { select = '*', eq = {}, gte = {}, lte = {}, order = 'scheduled_at.asc', limit = 100, or = '' } = opts;
     const p = new URLSearchParams({ select, order, limit: limit.toString() });
     Object.entries(eq).forEach(([k, v]) => p.set(k, `eq.${v}`));
     Object.entries(gte).forEach(([k, v]) => p.set(k, `gte.${v}`));
     Object.entries(lte).forEach(([k, v]) => p.set(k, `lte.${v}`));
+    if (or) p.set('or', or);
 
     const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
     log('Fetching: ' + url);
@@ -227,6 +228,7 @@ function renderMatch(m) {
                         ${p2Result}
                     </div>
                 </div>
+                <div class="match-odds" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-top:2px;display:none"></div>
             </div>
         </div>
     `;
@@ -249,6 +251,33 @@ function renderMatches(matches, containerId) {
             if (m) showModal(m);
         });
     });
+    
+    attachOddsToMatches(matches, el);
+}
+
+async function attachOddsToMatches(matches, container) {
+    for (const m of matches) {
+        const p1 = m.player1 || {};
+        const p2 = m.player2 || {};
+        const card = container.querySelector(`.match[data-id="${m.id}"]`);
+        if (!card) continue;
+        
+        const odds = await loadOdds(m.id, p1.name, p2.name);
+        if (!odds) continue;
+        
+        const oddsEl = card.querySelector('.match-odds');
+        if (oddsEl) {
+            oddsEl.textContent = renderOddsShort(odds);
+            oddsEl.style.display = 'block';
+        }
+    }
+}
+
+function renderOddsShort(odds) {
+    if (!odds || !odds.player1_odd || !odds.player2_odd) return '';
+    const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(0);
+    const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(0);
+    return `${p1Prob}% / ${p2Prob}%`;
 }
 
 function renderFiltered() {
@@ -326,7 +355,7 @@ function showModal(m) {
     if (m.id) {
         Promise.all([
             loadPredictionFactors(m.id),
-            loadOdds(m.id)
+            loadOdds(m.id, p1.name, p2.name)
         ]).then(([factors, odds]) => {
             const factorsEl = document.getElementById('modal-factors');
             if (factorsEl) {
@@ -643,14 +672,29 @@ function renderFactorBar(label, p1Score, p2Score, p1Name, p2Name) {
     `;
 }
 
-async function loadOdds(matchId) {
+async function loadOdds(matchId, p1Name, p2Name) {
     try {
-        const odds = await api('odds', {
-            select: 'player1_odd,player2_odd,market,source,captured_at',
-            eq: { match_id: matchId },
-            order: 'captured_at.desc',
-            limit: 1
-        });
+        let odds = null;
+        
+        if (matchId) {
+            odds = await api('odds', {
+                select: 'player1_odd,player2_odd,market,source,captured_at',
+                eq: { match_id: matchId },
+                order: 'captured_at.desc',
+                limit: 1
+            });
+        }
+        
+        if (!odds || odds.length === 0) {
+            const orFilter = `player1_name.eq.${encodeURIComponent(p1Name)},player2_name.eq.${encodeURIComponent(p1Name)},player1_name.eq.${encodeURIComponent(p2Name)},player2_name.eq.${encodeURIComponent(p2Name)}`;
+            odds = await api('odds', {
+                select: 'player1_odd,player2_odd,market,source,captured_at',
+                or: orFilter,
+                order: 'captured_at.desc',
+                limit: 1
+            });
+        }
+        
         return odds[0] || null;
     } catch (e) {
         console.error('Error loading odds:', e);

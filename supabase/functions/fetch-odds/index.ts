@@ -118,41 +118,19 @@ async function syncOdds(sport: string = "tennis"): Promise<{ success: boolean; m
             .not("player1_id", "is", null)
             .not("player2_id", "is", null);
 
-        if (!matches || matches.length === 0) {
-            return { success: true, message: "No upcoming matches to sync", matchesProcessed: 0 };
-        }
-
         const { data: players } = await supabase
             .from("players")
             .select("id, name");
 
-        if (!players || players.length === 0) {
-            return { success: false, message: "No players found", matchesProcessed: 0 };
-        }
-
-        const playerMap = new Map(players.map(p => [p.id, p.name]));
+        const playerMap = new Map(players?.map(p => [p.id, p.name]) || []);
         let matchesProcessed = 0;
+        let oddsSaved = 0;
 
         for (const match of oddsData) {
             const homeTeam = match.home_team || match.players?.[0];
             const awayTeam = match.away_team || match.players?.[1];
 
             if (!homeTeam || !awayTeam) continue;
-
-            const bestHome = findBestMatch(homeTeam, matches.map(m => ({
-                id: m.id,
-                name: playerMap.get(m.player1_id) || ""
-            })));
-
-            const bestAway = findBestMatch(awayTeam, matches.map(m => ({
-                id: m.id,
-                name: playerMap.get(m.player2_id) || ""
-            })));
-
-            if (!bestHome || !bestAway || bestHome.id !== bestAway.id) continue;
-
-            const dbMatch = matches.find(m => m.id === bestHome.id);
-            if (!dbMatch) continue;
 
             const bestBookmaker = match.bookmakers?.[0];
             if (!bestBookmaker?.markets?.[0]?.outcomes) continue;
@@ -167,31 +145,56 @@ async function syncOdds(sport: string = "tennis"): Promise<{ success: boolean; m
 
             if (!p1Odd || !p2Odd || p1Odd <= 1 || p2Odd <= 1) continue;
 
+            let dbMatchId: number | null = null;
+            if (matches && matches.length > 0) {
+                const bestHome = findBestMatch(homeTeam, matches.map(m => ({
+                    id: m.id,
+                    name: playerMap.get(m.player1_id) || ""
+                })));
+
+                const bestAway = findBestMatch(awayTeam, matches.map(m => ({
+                    id: m.id,
+                    name: playerMap.get(m.player2_id) || ""
+                })));
+
+                if (bestHome && bestAway && bestHome.id === bestAway.id) {
+                    dbMatchId = bestHome.id;
+                }
+            }
+
             const { error } = await supabase
                 .from("odds")
                 .upsert({
-                    match_id: dbMatch.id,
+                    match_id: dbMatchId,
+                    player1_name: homeTeam,
+                    player2_name: awayTeam,
                     player1_odd: p1Odd,
                     player2_odd: p2Odd,
+                    sport_key: match.sport_key,
+                    commence_time: new Date(match.commence_time).toISOString(),
                     market: "match_winner",
                     source: "the_odds_api",
                     captured_at: new Date().toISOString(),
                 }, {
-                    onConflict: "match_id,market,source",
+                    onConflict: "player1_name,player2_name,market,source,captured_at",
                 });
 
             if (error) {
-                console.error(`Error syncing odds for match ${dbMatch.id}:`, error);
+                console.error(`Error syncing odds for ${homeTeam} vs ${awayTeam}:`, error);
                 continue;
             }
 
-            await supabase.rpc("generate_prediction", { p_match_id: dbMatch.id });
-            matchesProcessed++;
+            oddsSaved++;
+
+            if (dbMatchId) {
+                await supabase.rpc("generate_prediction", { p_match_id: dbMatchId });
+                matchesProcessed++;
+            }
         }
 
         return {
             success: true,
-            message: `Synced odds for ${matchesProcessed} matches`,
+            message: `Synced odds for ${oddsSaved} matches (${matchesProcessed} matched to DB)`,
             matchesProcessed,
         };
     } catch (error) {
