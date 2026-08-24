@@ -18,8 +18,9 @@ async function api(table, opts = {}) {
     Object.entries(lte).forEach(([k, v]) => p.set(k, `lte.${v}`));
     if (or) p.set('or', or);
 
-    const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
+    const url = `${SUPABASE_URL}/rest/v1/${table}?${p}&_ts=${Date.now()}`;
     log('Fetching: ' + url);
+    console.debug('[api] table=' + table + ' opts=', opts, 'url=' + url);
 
     const res = await fetch(url, {
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
@@ -44,21 +45,25 @@ async function loadLive() {
 async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
-    return api('matches', {
+    const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
+    console.log('loadToday', { today, tomorrow, count: data?.length || 0, ids: (data || []).map(m => m.id) });
+    return data;
 }
 
 async function loadUpcoming() {
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
-    return api('matches', {
+    const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
         eq: { status: 'upcoming' }
     });
+    console.log('loadUpcoming', { tomorrow, max, count: data?.length || 0, ids: (data || []).map(m => m.id) });
+    return data;
 }
 
 async function loadResults() {
