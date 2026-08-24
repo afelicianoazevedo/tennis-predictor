@@ -21,15 +21,15 @@ returns table (
 language plpgsql
 as $$
 begin
-    ranking_weight := 0.20;
-    strength_weight := 0.16;
-    form_weight := 0.16;
-    surface_weight := 0.12;
-    serve_weight := 0.08;
-    return_weight := 0.08;
-    h2h_weight := 0.04;
-    market_weight := 0.08;
-    context_weight := 0.08;
+    ranking_weight := 0.35;
+    strength_weight := 0.14;
+    form_weight := 0.14;
+    surface_weight := 0.10;
+    serve_weight := 0.06;
+    return_weight := 0.06;
+    h2h_weight := 0.05;
+    market_weight := 0.05;
+    context_weight := 0.05;
     RETURN NEXT;
 END;
 $$;
@@ -186,7 +186,7 @@ begin
     SELECT coalesce(p.ranking_points, 0) INTO p1_ranking FROM public.players p WHERE p.id = p_player1_id;
     SELECT coalesce(p.ranking_points, 0) INTO p2_ranking FROM public.players p WHERE p.id = p_player2_id;
     
-    player1_ranking_score := 50 + (p1_ranking - p2_ranking) / 5;
+    player1_ranking_score := 50 + (p1_ranking - p2_ranking) / 3;
     player1_ranking_score := greatest(0, least(100, player1_ranking_score));
     player2_ranking_score := 100 - player1_ranking_score;
 
