@@ -155,7 +155,8 @@ function confClass(prob, confidenceScore) {
     if (value > 60 && value <= 75) return 'dangerous';
     if (value > 75 && value <= 90) return 'tendency';
     if (value > 90 && value <= 100) return 'strong';
-    return '';
+    if (value < 50) return 'uncertain';
+    return 'uncertain';
 }
 
 function confLabel(s) {
@@ -164,7 +165,8 @@ function confLabel(s) {
     if (s > 60 && s <= 75) return 'ARRISCADO';
     if (s > 75 && s <= 90) return 'TENDÊNCIA';
     if (s > 90 && s <= 100) return 'FORTE';
-    return '';
+    if (s < 50) return 'INCERTO';
+    return 'INCERTO';
 }
 
 function statusLabel(s) {
@@ -193,8 +195,14 @@ function renderMatch(m) {
     const p2Prob = m.player2_probability;
     const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
-    const p1Fav = predId && p1.id === predId;
-    const p2Fav = predId && p2.id === predId;
+    let p1Fav = predId && p1.id === predId;
+    let p2Fav = predId && p2.id === predId;
+    
+    if (!predId && p1Prob != null && p2Prob != null) {
+        if (p1Prob > p2Prob) p1Fav = true;
+        else if (p2Prob > p1Prob) p2Fav = true;
+        else if (p1Prob === p2Prob) p1Fav = true;
+    }
     const isCompleted = m.status === 'completed';
     const isLive = m.status === 'live';
 
@@ -298,8 +306,14 @@ function showModal(m) {
     const p2Prob = m.player2_probability;
     const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
-    const p1Fav = predId && p1.id === predId;
-    const p2Fav = predId && p2.id === predId;
+    let p1Fav = predId && p1.id === predId;
+    let p2Fav = predId && p2.id === predId;
+    
+    if (!predId && p1Prob != null && p2Prob != null) {
+        if (p1Prob > p2Prob) p1Fav = true;
+        else if (p2Prob > p1Prob) p2Fav = true;
+        else if (p1Prob === p2Prob) p1Fav = true;
+    }
 
     const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
     const favLabel = p1Fav ? p1.name : (p2Fav ? p2.name : null);
