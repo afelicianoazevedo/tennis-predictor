@@ -18,7 +18,7 @@ async function api(table, opts = {}) {
     Object.entries(lte).forEach(([k, v]) => p.set(k, `lte.${v}`));
     if (or) p.set('or', or);
 
-    const url = `${SUPABASE_URL}/rest/v1/${table}?${p}&_ts=${Date.now()}`;
+    const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
     log('Fetching: ' + url);
     console.debug('[api] table=' + table + ' opts=', opts, 'url=' + url);
 
