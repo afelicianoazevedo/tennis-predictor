@@ -215,6 +215,7 @@ function renderMatch(m) {
                             ${p1.name || 'TBD'}
                         </div>
                         <div class="player-info">${p1Info}${!p1Info && p2Info ? '<span class="player-info invisible">-</span>' : ''}</div>
+                        <div class="player-odds" style="font-size:0.7rem;color:var(--text-dim);display:none"></div>
                         ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p1Result}
                     </div>
@@ -224,6 +225,7 @@ function renderMatch(m) {
                             ${p2.name || 'TBD'}
                         </div>
                         <div class="player-info">${p2Info}${!p2Info && p1Info ? '<span class="player-info invisible">-</span>' : ''}</div>
+                        <div class="player-odds" style="font-size:0.7rem;color:var(--text-dim);display:none"></div>
                         ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p2Result}
                     </div>
@@ -265,19 +267,18 @@ async function attachOddsToMatches(matches, container) {
         const odds = await loadOdds(m.id, p1.name, p2.name);
         if (!odds) continue;
         
-        const oddsEl = card.querySelector('.match-odds');
-        if (oddsEl) {
-            oddsEl.textContent = renderOddsShort(odds);
-            oddsEl.style.display = 'block';
+        const oddsText = renderOdds(odds);
+        const p1OddsEl = card.querySelector('.player:first-child .player-odds');
+        const p2OddsEl = card.querySelector('.player:last-child .player-odds');
+        if (p1OddsEl) {
+            p1OddsEl.textContent = oddsText.p1;
+            p1OddsEl.style.display = 'block';
+        }
+        if (p2OddsEl) {
+            p2OddsEl.textContent = oddsText.p2;
+            p2OddsEl.style.display = 'block';
         }
     }
-}
-
-function renderOddsShort(odds) {
-    if (!odds || !odds.player1_odd || !odds.player2_odd) return '';
-    const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(0);
-    const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(0);
-    return `${p1Prob}% / ${p2Prob}%`;
 }
 
 function renderFiltered() {
@@ -366,8 +367,8 @@ function showModal(m) {
                 const oddsText = renderOdds(odds);
                 const oddsP1El = document.getElementById('modal-odds-p1');
                 const oddsP2El = document.getElementById('modal-odds-p2');
-                if (oddsP1El) oddsP1El.textContent = oddsText;
-                if (oddsP2El) oddsP2El.textContent = oddsText;
+                if (oddsP1El) oddsP1El.textContent = oddsText.p1;
+                if (oddsP2El) oddsP2El.textContent = oddsText.p2;
             }
         });
     }
@@ -708,7 +709,11 @@ function renderOdds(odds) {
     const p2Odd = Number(odds.player2_odd).toFixed(2);
     const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(1);
     const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(1);
-    return `Odds: ${p1Odd} (${p1Prob}%) vs ${p2Odd} (${p2Prob}%)`;
+    return {
+        p1: `Odd: ${p1Odd} (${p1Prob}%)`,
+        p2: `Odd: ${p2Odd} (${p2Prob}%)`,
+        combined: `${p1Prob}% / ${p2Prob}%`
+    };
 }
 
 function renderPredictionFactors(factors, p1Name, p2Name) {
