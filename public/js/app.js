@@ -151,18 +151,20 @@ function date(d) {
 function confClass(prob, confidenceScore) {
     if (prob == null && confidenceScore == null) return '';
     const value = prob != null ? prob : confidenceScore;
-    if (value < 50) return 'uncertain';
-    if (value < 60) return 'dangerous';
-    if (value < 70) return 'tendency';
-    return 'strong';
+    if (value >= 50 && value <= 60) return 'uncertain';
+    if (value > 60 && value <= 75) return 'dangerous';
+    if (value > 75 && value <= 90) return 'tendency';
+    if (value > 90 && value <= 100) return 'strong';
+    return '';
 }
 
 function confLabel(s) {
     if (s == null) return '';
-    if (s < 50) return 'INCERTO';
-    if (s < 60) return 'PERIGOSO';
-    if (s < 70) return 'TENDÊNCIA';
-    return 'FORTE';
+    if (s >= 50 && s <= 60) return 'INCERTO';
+    if (s > 60 && s <= 75) return 'ARRISCADO';
+    if (s > 75 && s <= 90) return 'TENDÊNCIA';
+    if (s > 90 && s <= 100) return 'FORTE';
+    return '';
 }
 
 function statusLabel(s) {
@@ -197,8 +199,8 @@ function renderMatch(m) {
     const isLive = m.status === 'live';
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
-    const p1Confidence = p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p2Confidence = p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
@@ -324,7 +326,7 @@ function showModal(m) {
                 <div style="font-weight:700;font-size:1rem">${p1.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
                 <div id="modal-odds-p1" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
-                ${p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
+                ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${Math.round(p1Prob)}%</span>` : ''}
             </div>
             <div style="text-align:center">
                 <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
@@ -334,10 +336,10 @@ function showModal(m) {
                 <div style="font-weight:700;font-size:1rem">${p2.name || 'TBD'}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim)">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
                 <div id="modal-odds-p2" style="font-size:0.7rem;color:var(--text-dim);margin-top:2px"></div>
-                ${p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
+                ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${Math.round(p2Prob)}%</span>` : ''}
             </div>
         </div>
-        ${p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${Math.round(p1Prob)}%</strong> vs <strong>${Math.round(p2Prob)}%</strong></div>` : ''}
+        ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${Math.round(p1Prob)}%</strong> vs <strong>${Math.round(p2Prob)}%</strong></div>` : ''}
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         <div id="modal-factors" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
             <div class="factors-loading">A carregar fatores...</div>

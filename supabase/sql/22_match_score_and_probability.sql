@@ -21,14 +21,14 @@ returns table (
 language plpgsql
 as $$
 begin
-    ranking_weight := 0.35;
-    strength_weight := 0.14;
-    form_weight := 0.14;
-    surface_weight := 0.10;
-    serve_weight := 0.06;
-    return_weight := 0.06;
+    ranking_weight := 0.49;
+    strength_weight := 0.10;
+    form_weight := 0.10;
+    surface_weight := 0.08;
+    serve_weight := 0.05;
+    return_weight := 0.04;
     h2h_weight := 0.05;
-    market_weight := 0.05;
+    market_weight := 0.04;
     context_weight := 0.05;
     RETURN NEXT;
 END;
