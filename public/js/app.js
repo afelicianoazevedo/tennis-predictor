@@ -1,10 +1,11 @@
 const SUPABASE_URL = 'https://ywmrxvurnxgnmpcjnisi.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3bXJ4dnVybnhnbm1wY2puaXNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0MDA2MjIsImV4cCI6MjEwMjk3NjYyMn0.TXp8PMNWoKekdmkByhvtJodS7OLmMeRGiBp1WomOCA0';
 
-let currentTab = 'live';
+let currentTab = 'matches';
 let currentFilter = 'all';
 let cachedData = {};
 let livePollInterval = null;
+let settings = { theme: 'dark', oddsFilter: 'all' };
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -20,7 +21,6 @@ async function api(table, opts = {}) {
 
     const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
     log('Fetching: ' + url);
-    console.debug('[api] table=' + table + ' opts=', opts, 'url=' + url);
 
     const res = await fetch(url, {
         headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
@@ -50,7 +50,6 @@ async function loadToday() {
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
-    console.log('loadToday', { today, tomorrow, count: data?.length || 0, ids: (data || []).map(m => m.id) });
     return data;
 }
 
@@ -62,7 +61,6 @@ async function loadUpcoming() {
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
         eq: { status: 'upcoming' }
     });
-    console.log('loadUpcoming', { tomorrow, max, count: data?.length || 0, ids: (data || []).map(m => m.id) });
     return data;
 }
 
@@ -73,6 +71,17 @@ async function loadResults() {
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
     return data.filter(m => m.score && m.score !== '0-0');
+}
+
+async function loadAllMatches() {
+    const today = new Date().toISOString().split('T')[0];
+    const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
+    const data = await api('matches', {
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        gte: { scheduled_at: today }, lte: { scheduled_at: max }, limit: 500,
+        eq: { status: 'upcoming' }
+    });
+    return data;
 }
 
 async function loadStats(period = 'all') {
@@ -183,6 +192,24 @@ function confLabel(s) {
     return 'INCERTO';
 }
 
+function applyTheme(theme) {
+    if (theme === 'light') {
+        document.documentElement.style.setProperty('--bg', '#f8fafc');
+        document.documentElement.style.setProperty('--bg-card', '#ffffff');
+        document.documentElement.style.setProperty('--bg-hover', '#f1f5f9');
+        document.documentElement.style.setProperty('--text', '#0f172a');
+        document.documentElement.style.setProperty('--text-dim', '#64748b');
+        document.documentElement.style.setProperty('--border', '#e2e8f0');
+    } else {
+        document.documentElement.style.setProperty('--bg', '#0f172a');
+        document.documentElement.style.setProperty('--bg-card', '#1e293b');
+        document.documentElement.style.setProperty('--bg-hover', '#334155');
+        document.documentElement.style.setProperty('--text', '#f1f5f9');
+        document.documentElement.style.setProperty('--text-dim', '#94a3b8');
+        document.documentElement.style.setProperty('--border', '#334155');
+    }
+}
+
 function statusLabel(s) {
     return { upcoming: 'Agendado', live: 'LIVE', completed: 'Terminado', cancelled: 'Cancelado' }[s] || s;
 }
@@ -198,6 +225,11 @@ function filterMatches(matches, cat) {
         if (cat === 'women') return !doubles && m.player1?.gender === 'F';
         return true;
     });
+}
+
+function filterOdds(matches, mode) {
+    if (mode === 'all') return matches;
+    return matches.filter(m => m.player1_probability != null && m.player2_probability != null);
 }
 
 function renderMatch(m) {
@@ -317,8 +349,9 @@ async function attachOddsToMatches(matches, container) {
 
 function renderFiltered() {
     const data = cachedData[currentTab] || [];
-    const filtered = filterMatches(data, currentFilter);
-    renderMatches(filtered, `${currentTab}-matches`);
+    const genderFiltered = filterMatches(data, currentFilter);
+    const oddsFiltered = filterOdds(genderFiltered, settings.oddsFilter);
+    renderMatches(oddsFiltered, 'matches-list');
 }
 
 function showModal(m) {
@@ -856,42 +889,41 @@ async function switchTab(tab) {
         return;
     }
 
-    loader(true);
-    try {
-        if (tab === 'live') cachedData[tab] = await loadLive();
-        else if (tab === 'today') cachedData[tab] = await loadToday();
-        else if (tab === 'upcoming') cachedData[tab] = await loadUpcoming();
-        else if (tab === 'results') cachedData[tab] = await loadResults();
-        log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + tab);
-    } catch (e) {
-        log('ERROR loading ' + tab + ': ' + e.message);
-        toast('Erro: ' + e.message);
-    } finally {
-        loader(false);
-    }
-
-    if (tab !== 'stats') {
+    if (tab === 'matches') {
+        loader(true);
+        try {
+            cachedData[tab] = await loadAllMatches();
+            log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches');
+        } catch (e) {
+            log('ERROR loading matches: ' + e.message);
+            toast('Erro: ' + e.message);
+        } finally {
+            loader(false);
+        }
         renderFiltered();
+        return;
     }
 
-    if (tab === 'live') {
-        livePollInterval = setInterval(async () => {
-            log('Polling live matches...');
-            try {
-                const data = await loadLive();
-                cachedData['live'] = data;
-                if (currentTab === 'live') {
-                    renderFiltered();
-                }
-            } catch (e) {
-                log('Poll error: ' + e.message);
-            }
-        }, 30000);
+    if (tab === 'settings' || tab === 'about') {
+        return;
     }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     log('DOM loaded, initializing...');
+
+    const savedTheme = localStorage.getItem('tp-theme');
+    if (savedTheme) {
+        settings.theme = savedTheme;
+        document.getElementById('setting-theme').value = savedTheme;
+        applyTheme(savedTheme);
+    }
+
+    const savedOdds = localStorage.getItem('tp-odds');
+    if (savedOdds) {
+        settings.oddsFilter = savedOdds;
+        document.getElementById('setting-odds-filter').value = savedOdds;
+    }
 
     document.querySelectorAll('.tab').forEach(t => {
         t.addEventListener('click', () => {
@@ -908,6 +940,18 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFilter = f.dataset.filter;
             renderFiltered();
         });
+    });
+
+    document.getElementById('setting-theme').addEventListener('change', e => {
+        settings.theme = e.target.value;
+        localStorage.setItem('tp-theme', settings.theme);
+        applyTheme(settings.theme);
+    });
+
+    document.getElementById('setting-odds-filter').addEventListener('change', e => {
+        settings.oddsFilter = e.target.value;
+        localStorage.setItem('tp-odds', settings.oddsFilter);
+        renderFiltered();
     });
 
     document.querySelector('.modal-close').addEventListener('click', () => {
@@ -929,6 +973,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
-    log('Initialization complete, loading live...');
-    switchTab('live');
+    log('Initialization complete, loading matches...');
+    switchTab('matches');
 });

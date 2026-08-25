@@ -23,25 +23,21 @@
         </header>
 
         <nav class="tabs">
-            <button class="tab active" data-tab="live">
-                <span class="tab-icon">🔴</span>
-                <span class="tab-label">Live</span>
-            </button>
-            <button class="tab" data-tab="today">
-                <span class="tab-icon">📅</span>
-                <span class="tab-label">Hoje</span>
-            </button>
-            <button class="tab" data-tab="results">
-                <span class="tab-icon">🏆</span>
-                <span class="tab-label">Resultados</span>
-            </button>
-            <button class="tab" data-tab="upcoming">
-                <span class="tab-icon">📋</span>
-                <span class="tab-label">Próximos</span>
+            <button class="tab active" data-tab="matches">
+                <span class="tab-icon">🎾</span>
+                <span class="tab-label">Jogos</span>
             </button>
             <button class="tab" data-tab="stats">
                 <span class="tab-icon">📊</span>
                 <span class="tab-label">Stats</span>
+            </button>
+            <button class="tab" data-tab="settings">
+                <span class="tab-icon">⚙️</span>
+                <span class="tab-label">Settings</span>
+            </button>
+            <button class="tab" data-tab="about">
+                <span class="tab-icon">ℹ️</span>
+                <span class="tab-label">About</span>
             </button>
         </nav>
 
@@ -53,17 +49,8 @@
         </div>
 
         <main class="content">
-            <section id="tab-live" class="panel active">
-                <div id="live-matches" class="matches"></div>
-            </section>
-            <section id="tab-today" class="panel">
-                <div id="today-matches" class="matches"></div>
-            </section>
-            <section id="tab-results" class="panel">
-                <div id="results-matches" class="matches"></div>
-            </section>
-            <section id="tab-upcoming" class="panel">
-                <div id="upcoming-matches" class="matches"></div>
+            <section id="tab-matches" class="panel active">
+                <div id="matches-list" class="matches"></div>
             </section>
             <section id="tab-stats" class="panel">
                 <div id="stats-panel" class="stats"></div>
@@ -71,6 +58,38 @@
                     <canvas id="accuracy-chart"></canvas>
                 </div>
                 <div id="trend-charts" class="trend-charts"></div>
+            </section>
+            <section id="tab-settings" class="panel">
+                <div class="settings-group">
+                    <label class="setting-item">
+                        <span>Tema</span>
+                        <select id="setting-theme">
+                            <option value="dark">Escuro</option>
+                            <option value="light">Claro</option>
+                        </select>
+                    </label>
+                    <label class="setting-item">
+                        <span>Mostrar</span>
+                        <select id="setting-odds-filter">
+                            <option value="all">Todos os jogos</option>
+                            <option value="odds">Apenas com odds</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+            <section id="tab-about" class="panel">
+                <div class="about-box">
+                    <h2>Sobre</h2>
+                    <p>O Tennis Predictor combina dados históricos, forma, superfície, ranking e odds de mercado para estimar a probabilidade de vitória de cada jogador.</p>
+                    <h3>Critérios de classificação</h3>
+                    <ul>
+                        <li><strong>Increrto</strong>: 50% – 60%</li>
+                        <li><strong>Arriscado</strong>: 60% – 75%</li>
+                        <li><strong>Tendência</strong>: 75% – 90%</li>
+                        <li><strong>Forte</strong>: 90% – 100%</li>
+                    </ul>
+                    <p>A classificação reflete a confiança do modelo na previsão. Quanto mais próxima de 100%, mais forte é a tendência apontada.</p>
+                </div>
             </section>
         </main>
 

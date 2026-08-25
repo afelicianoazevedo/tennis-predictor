@@ -815,3 +815,51 @@ body {
         grid-template-columns: repeat(4, 1fr);
     }
 }
+
+/* Settings */
+.settings-group {
+    padding: 16px;
+}
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+.setting-item span {
+    font-weight: 500;
+}
+.setting-item select {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 0.9rem;
+}
+
+/* About */
+.about-box {
+    padding: 16px;
+}
+.about-box h2 {
+    font-size: 1.2rem;
+    margin-bottom: 12px;
+}
+.about-box h3 {
+    font-size: 1rem;
+    margin: 16px 0 8px;
+}
+.about-box p {
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+.about-box ul {
+    margin-left: 20px;
+    color: var(--text-dim);
+}
+.about-box li {
+    margin-bottom: 6px;
+}
