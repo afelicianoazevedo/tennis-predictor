@@ -5,6 +5,7 @@ let currentTab = 'matches';
 let currentFilter = 'all';
 let cachedData = {};
 let livePollInterval = null;
+let matchesPollInterval = null;
 let settings = { theme: 'dark', oddsFilter: 'all' };
 let selectedDate = getLocalYMD(new Date());
 
@@ -378,7 +379,7 @@ function renderMatch(m) {
                         ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
                         ${p1Result}
                     </div>
-                    <div class="match-score-vs">${m.score || 'vs'}</div>
+                    <div class="match-score-vs">${isCompleted && m.score ? m.score : 'vs'}</div>
                     <div class="player">
                         <div class="player-name">
                             ${p2.name || 'TBD'}
@@ -970,6 +971,11 @@ async function switchTab(tab) {
         livePollInterval = null;
     }
 
+    if (matchesPollInterval) {
+        clearInterval(matchesPollInterval);
+        matchesPollInterval = null;
+    }
+
     if (tab === 'stats') {
         loader(true);
         try {
@@ -1026,6 +1032,19 @@ async function switchTab(tab) {
             loader(false);
         }
         renderFiltered();
+
+        matchesPollInterval = setInterval(async () => {
+            log('Polling matches for date ' + selectedDate + '...');
+            try {
+                const data = await loadAllMatches(selectedDate);
+                cachedData['matches'] = data;
+                if (currentTab === 'matches') {
+                    renderFiltered();
+                }
+            } catch (e) {
+                log('Matches poll error: ' + e.message);
+            }
+        }, 30000);
         return;
     }
 
@@ -1069,6 +1088,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('date-prev').addEventListener('click', () => changeDate(-1));
     document.getElementById('date-next').addEventListener('click', () => changeDate(1));
+    document.getElementById('date-refresh').addEventListener('click', async () => {
+        if (currentTab === 'matches') {
+            loader(true);
+            try {
+                cachedData[currentTab] = await loadAllMatches(selectedDate);
+                log('Refreshed matches for ' + selectedDate);
+            } catch (e) {
+                log('ERROR refreshing matches: ' + e.message);
+                toast('Erro: ' + e.message);
+            } finally {
+                loader(false);
+            }
+            renderFiltered();
+        }
+    });
 
     const dateInput = document.getElementById('date-input');
     if (dateInput) {

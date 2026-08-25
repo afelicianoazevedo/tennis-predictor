@@ -199,6 +199,13 @@ body {
     outline: none;
 }
 
+.date-refresh-btn {
+    width: auto;
+    padding: 0 10px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+}
+
 /* Content */
 .content {
     padding: 12px;
