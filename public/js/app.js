@@ -77,12 +77,27 @@ async function loadResults() {
 async function loadAllMatches(date) {
     const d = date || selectedDate;
     const next = addDays(d, 1);
-    const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
-        gte: { scheduled_at: d }, lte: { scheduled_at: next }, limit: 500,
-        eq: { status: 'upcoming' }
+    const start = d + 'T00:00:00';
+    const end = next + 'T00:00:00';
+    
+    const [upcoming, completed] = await Promise.all([
+        api('matches', {
+            select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+            gte: { scheduled_at: start }, lt: { scheduled_at: end },
+            eq: { status: 'upcoming' }
+        }),
+        api('matches', {
+            select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+            gte: { scheduled_at: start }, lt: { scheduled_at: end },
+            eq: { status: 'completed' }
+        })
+    ]);
+    
+    const all = [...(upcoming || []), ...(completed || [])];
+    return all.filter(m => {
+        const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+        return matchDate === d;
     });
-    return data;
 }
 
 async function loadStats(period = 'all') {
