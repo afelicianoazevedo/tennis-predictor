@@ -281,18 +281,9 @@ function syncDateInput() {
     if (input) input.value = selectedDate;
 }
 
-function syncDateEuLabel() {
-    const el = document.getElementById('date-eu');
-    if (el && selectedDate) {
-        const [y, m, d] = selectedDate.split('-').map(Number);
-        el.textContent = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
-    }
-}
-
 async function applyDate(newDate) {
     selectedDate = newDate;
     syncDateInput();
-    syncDateEuLabel();
     
     if (currentTab === 'matches') {
         loader(true);
@@ -1023,7 +1014,6 @@ async function switchTab(tab) {
 
     if (tab === 'matches') {
         syncDateInput();
-        syncDateEuLabel();
         await cleanupOrphanMatches();
         loader(true);
         try {
@@ -1124,7 +1114,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
-    syncDateEuLabel();
     log('Initialization complete, loading matches...');
     switchTab('matches');
 });
