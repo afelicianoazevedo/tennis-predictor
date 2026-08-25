@@ -40,13 +40,22 @@ async function liveRequest(endpoint) {
     return res.json();
 }
 
+function parseApiDate(dateStr) {
+    if (!dateStr) return null;
+    const parts = dateStr.split(' ')[0].split('/');
+    if (parts.length !== 3) return new Date(dateStr).toISOString().replace('T', ' ').replace('Z', '');
+    const [month, day, year] = parts.map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
 async function supabaseUpsert(match) {
     const externalId = String(match.id);
-    const scheduledAt = match.scheduled_time || match.start_time;
+    const scheduledAt = parseApiDate(match.scheduled_time || match.start_time);
 
     const payload = {
         api_id: externalId,
-        scheduled_at: scheduledAt ? new Date(scheduledAt).toISOString().replace('T', ' ').replace('Z', '') : null,
+        scheduled_at: scheduledAt,
         status: mapStatus(match.status),
         score: formatScore(match),
         sets: match.score?.sets ? JSON.stringify(match.score.sets) : null,
@@ -81,7 +90,7 @@ async function supabaseUpsert(match) {
         return;
     }
 
-    console.log(`Inserting ${externalId}`);
+    console.log(`Inserting ${externalId}: scheduledAt=${scheduledAt}`);
     const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
         method: 'POST',
         headers: {
