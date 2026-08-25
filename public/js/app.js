@@ -76,7 +76,7 @@ async function loadResults() {
 
 async function loadAllMatches(date) {
     const d = date || selectedDate;
-    const next = new Date(new Date(d).getTime() + 864e5).toISOString().split('T')[0];
+    const next = addDays(d, 1);
     const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
         gte: { scheduled_at: d }, lte: { scheduled_at: next }, limit: 500,
@@ -1029,17 +1029,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         dateInput.addEventListener('keydown', e => {
             if (e.key === 'Enter' && e.target.value) applyDate(e.target.value);
-        });
-    }
-
-    const dateCalendarBtn = document.getElementById('date-calendar');
-    if (dateCalendarBtn && dateInput) {
-        dateCalendarBtn.addEventListener('click', () => {
-            if (typeof dateInput.showPicker === 'function') {
-                dateInput.showPicker();
-            } else {
-                dateInput.focus();
-            }
         });
     }
 
