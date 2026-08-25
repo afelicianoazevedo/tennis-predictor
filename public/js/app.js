@@ -85,6 +85,7 @@ async function loadAllMatches(date) {
 
     let upcoming = [];
     let completed = [];
+    let live = [];
 
     if (!isPast) {
         upcoming = await api('matches', {
@@ -100,7 +101,14 @@ async function loadAllMatches(date) {
         eq: { status: 'completed' }
     });
 
-    const all = [...(upcoming || []), ...(completed || [])];
+    live = await api('matches', {
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        gte: { scheduled_at: start }, lt: { scheduled_at: end },
+        eq: { status: 'live' }
+    });
+
+    const all = [...(upcoming || []), ...(completed || []), ...(live || [])];
+    log(`loadAllMatches(${d}): upcoming=${upcoming?.length || 0}, completed=${completed?.length || 0}, live=${live?.length || 0}, total=${all.length}`);
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
         return matchDate === d;
@@ -277,14 +285,36 @@ function addDays(dateStr, delta) {
     return getLocalYMD(date);
 }
 
+function formatDateEU(dateStr) {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+}
+
+function parseDateEU(str) {
+    if (!str) return null;
+    const parts = str.split('/');
+    if (parts.length !== 3) return null;
+    const [d, m, y] = parts.map(Number);
+    if (!d || !m || !y) return null;
+    const date = new Date(y, m - 1, d);
+    return getLocalYMD(date);
+}
+
 function syncDateInput() {
     const input = document.getElementById('date-input');
-    if (input) input.value = selectedDate;
+    if (input) input.value = formatDateEU(selectedDate);
 }
 
 async function applyDate(newDate) {
-    selectedDate = newDate;
+    const parsed = typeof newDate === 'string' && newDate.includes('/') ? parseDateEU(newDate) : newDate;
+    if (!parsed) {
+        log('Invalid date format: ' + newDate);
+        return;
+    }
+    selectedDate = parsed;
     syncDateInput();
+    log('Date changed to: ' + selectedDate);
     
     if (currentTab === 'matches') {
         loader(true);
@@ -1020,6 +1050,7 @@ async function switchTab(tab) {
 
     if (tab === 'matches') {
         syncDateInput();
+        log('Loading matches for date: ' + selectedDate);
         await cleanupOrphanMatches();
         loader(true);
         try {
@@ -1106,14 +1137,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dateInput = document.getElementById('date-input');
     if (dateInput) {
+        dateInput.addEventListener('input', e => {
+            let value = e.target.value.replace(/[^\d]/g, '');
+            if (value.length > 8) value = value.slice(0, 8);
+            const parts = [];
+            for (let i = 0; i < value.length && i < 8; i++) {
+                if (i === 2 || i === 4) parts.push('/');
+                parts.push(value[i]);
+            }
+            e.target.value = parts.join('');
+        });
+
         dateInput.addEventListener('change', e => {
-            if (e.target.value) applyDate(e.target.value);
+            const parsed = parseDateEU(e.target.value);
+            if (parsed) applyDate(parsed);
         });
         dateInput.addEventListener('blur', e => {
-            if (e.target.value && e.target.value !== selectedDate) applyDate(e.target.value);
+            const parsed = parseDateEU(e.target.value);
+            if (parsed && parsed !== selectedDate) applyDate(parsed);
         });
         dateInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter' && e.target.value) applyDate(e.target.value);
+            if (e.key === 'Enter') {
+                const parsed = parseDateEU(e.target.value);
+                if (parsed) applyDate(parsed);
+            }
         });
     }
 
