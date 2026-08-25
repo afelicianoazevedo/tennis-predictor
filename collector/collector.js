@@ -13,14 +13,15 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 const BASE_URL = 'https://api.livetennisapi.com/api/public/v1';
 
 const STATE_FILE = path.join(__dirname, 'state.json');
+const today = new Date().toISOString().split('T')[0];
 
-let state = { dailyRequests: 0, lastResetDate: new Date().toISOString().split('T')[0], trackedIds: [] };
+let state = { dailyRequests: 0, lastResetDate: today, trackedIds: [], finishedQueue: [], lastFinishedCheck: {} };
 if (fs.existsSync(STATE_FILE)) {
     state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
 }
-if (state.lastResetDate !== new Date().toISOString().split('T')[0]) {
+if (state.lastResetDate !== today) {
     state.dailyRequests = 0;
-    state.lastResetDate = new Date().toISOString().split('T')[0];
+    state.lastResetDate = today;
 }
 
 async function liveRequest(endpoint) {
@@ -80,7 +81,6 @@ async function supabaseUpsert(match) {
     }
 
     if (existing.length > 0) {
-        console.log(`Updating ${externalId}`);
         await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
             method: 'PATCH',
             headers: {
@@ -93,8 +93,7 @@ async function supabaseUpsert(match) {
         return;
     }
 
-    console.log(`Inserting ${externalId}: scheduledAt=${scheduledAt}`);
-    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
+    await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
         method: 'POST',
         headers: {
             'apikey': SUPABASE_KEY,
@@ -103,11 +102,6 @@ async function supabaseUpsert(match) {
         },
         body: JSON.stringify(payload)
     });
-
-    if (!insertRes.ok) {
-        const text = await insertRes.text();
-        console.error(`Failed to insert ${externalId}: ${insertRes.status} ${text}`);
-    }
 }
 
 function mapStatus(status) {
@@ -127,7 +121,7 @@ function formatScore(match) {
 }
 
 async function collect() {
-    console.log('Collecting matches...');
+    console.log(`Collecting matches... (requests today: ${state.dailyRequests}/100)`);
 
     const upcomingData = await liveRequest('/matches?status=upcoming&limit=100');
     const liveData = await liveRequest('/matches?status=live&limit=100');
@@ -145,20 +139,27 @@ async function collect() {
         await supabaseUpsert(match);
     }
 
+    state.trackedIds = [...currentIds];
+    state.finishedQueue = state.finishedQueue || [];
+
     const previousIds = new Set(state.trackedIds || []);
     const finishedIds = [...previousIds].filter(id => !currentIds.has(id));
 
-    console.log(`Checking ${finishedIds.length} finished matches...`);
+    if (finishedIds.length > 0) {
+        const finishedBudget = Math.max(0, 100 - state.dailyRequests);
+        const MAX_FINISHED_PER_RUN = 20;
+        const toCheck = finishedIds.slice(0, Math.min(finishedIds.length, MAX_FINISHED_PER_RUN, finishedBudget - 2));
+        console.log(`Checking ${toCheck.length}/${finishedIds.length} finished matches (budget ${finishedBudget})...`);
 
-    for (const id of finishedIds) {
-        if (state.dailyRequests >= 100) break;
-        const detail = await liveRequest(`/matches/${id}`);
-        if (detail?.data) {
-            await supabaseUpsert(detail.data);
+        for (const id of toCheck) {
+            if (state.dailyRequests >= 100) break;
+            const detail = await liveRequest(`/matches/${id}`);
+            if (detail?.data) {
+                await supabaseUpsert(detail.data);
+            }
         }
     }
 
-    state.trackedIds = [...currentIds];
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 
     console.log(`Done. Daily requests used: ${state.dailyRequests}/100`);
