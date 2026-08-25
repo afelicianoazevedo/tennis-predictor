@@ -36,10 +36,11 @@ async function api(table, opts = {}) {
 
 const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender)';
 const TOUR_SELECT = 'tournament:tournaments(name)';
+const NAME_SELECT = 'player1_name,player2_name,tournament_name';
 
 async function loadLive() {
     return api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         eq: { status: 'live' }, order: 'scheduled_at.asc'
     });
 }
@@ -48,7 +49,7 @@ async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
@@ -59,7 +60,7 @@ async function loadUpcoming() {
     const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
         eq: { status: 'upcoming' }
     });
@@ -69,7 +70,7 @@ async function loadUpcoming() {
 async function loadResults() {
     const week = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
     return data.filter(m => m.score && m.score !== '0-0');
@@ -89,20 +90,20 @@ async function loadAllMatches(date) {
 
     if (!isPast) {
         upcoming = await api('matches', {
-            select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+            select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
             gte: { scheduled_at: start }, lt: { scheduled_at: end },
             eq: { status: 'upcoming' }
         });
     }
 
     completed = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         gte: { scheduled_at: start }, lt: { scheduled_at: end },
         eq: { status: 'completed' }
     });
 
     live = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         gte: { scheduled_at: start }, lt: { scheduled_at: end },
         eq: { status: 'live' }
     });
@@ -387,6 +388,8 @@ function renderMatch(m) {
     const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${p2Display}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
     const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
+    const p1Name = p1.name || m.player1_name || 'TBD';
+    const p2Name = p2.name || m.player2_name || 'TBD';
     const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
     const p2Info = `${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}`;
 
@@ -398,12 +401,12 @@ function renderMatch(m) {
                 ${isLive ? '<span class="live-dot">●</span>' : ''}
             </div>
             <div class="match-body">
-                <div class="match-tour">${tour.name || ''} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</div>
+                <div class="match-tour">${m.tournament_name || tour.name || ''} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</div>
                 <div class="match-players">
                     <div class="player">
-                        <div class="player-name">
-                            ${p1.name || 'TBD'}
-                        </div>
+                <div class="player-name">
+                    ${p1Name}
+                </div>
                         <div class="player-info">${p1Info}${!p1Info && p2Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
                         ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
@@ -412,9 +415,9 @@ function renderMatch(m) {
                     <div class="match-score-vs">${isCompleted && m.score ? m.score : 'vs'}</div>
                     ${m.sets && isCompleted ? `<div class="match-sets">Sets: ${m.sets.replace(/[\[\]"]/g, '').replace(/,/g, ' - ')}</div>` : ''}
                     <div class="player">
-                        <div class="player-name">
-                            ${p2.name || 'TBD'}
-                        </div>
+                <div class="player-name">
+                    ${p2Name}
+                </div>
                         <div class="player-info">${p2Info}${!p2Info && p1Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
                         ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
@@ -455,7 +458,7 @@ async function attachOddsToMatches(matches, container) {
         const card = container.querySelector(`.match[data-id="${m.id}"]`);
         if (!card) continue;
         
-        const odds = await loadOdds(m.id, p1.name, p2.name);
+        const odds = await loadOdds(m.id, p1Name, p2Name);
         if (!odds) continue;
         
         const oddsText = renderOdds(odds);
@@ -502,7 +505,7 @@ function showModal(m) {
     }
 
     const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
-    const favLabel = p1Fav ? p1.name : (p2Fav ? p2.name : null);
+    const favLabel = p1Fav ? p1Name : (p2Fav ? p2Name : null);
     const showResult = m.status === 'completed' && m.score;
 
     const setsHtml = (m.sets && m.status === 'completed') ? (() => {
@@ -524,11 +527,11 @@ function showModal(m) {
     })() : '';
 
     document.getElementById('modal-content').innerHTML = `
-        <h3>${tour.name || 'Jogo'}</h3>
+        <h3>${m.tournament_name || tour.name || 'Jogo'}</h3>
         <p style="color:var(--text-dim);margin:8px 0 16px">${date(m.scheduled_at)} ${time(m.scheduled_at)} ${m.round ? '• ' + m.round : ''} ${m.surface ? '• ' + m.surface : ''}</p>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px">
             <div style="text-align:center;flex:1">
-                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p1.name || 'TBD'}</div>
+                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p1Name}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
                 <div id="modal-odds-p1" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob.toFixed(1)}%</span>` : ''}
@@ -538,7 +541,7 @@ function showModal(m) {
                 ${setsHtml}
             </div>
             <div style="text-align:center;flex:1">
-                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2.name || 'TBD'}</div>
+                <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2Name}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
                 <div id="modal-odds-p2" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob.toFixed(1)}%</span>` : ''}
@@ -563,11 +566,11 @@ function showModal(m) {
     if (m.id) {
         Promise.all([
             loadPredictionFactors(m.id),
-            loadOdds(m.id, p1.name, p2.name)
+            loadOdds(m.id, p1Name, p2Name)
         ]).then(([factors, odds]) => {
             const factorsEl = document.getElementById('modal-factors');
             if (factorsEl) {
-                factorsEl.outerHTML = renderPredictionFactors(factors, p1.name, p2.name, odds);
+                factorsEl.outerHTML = renderPredictionFactors(factors, p1Name, p2Name, odds);
             }
             
             if (odds) {

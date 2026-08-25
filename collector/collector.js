@@ -60,7 +60,10 @@ async function supabaseUpsert(match) {
         score: formatScore(match),
         sets: match.score?.sets ? JSON.stringify(match.score.sets) : null,
         round: match.round || null,
-        surface: match.surface || null
+        surface: match.surface || null,
+        player1_name: match.players?.p1?.name || null,
+        player2_name: match.players?.p2?.name || null,
+        tournament_name: match.tournament?.name || null
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
