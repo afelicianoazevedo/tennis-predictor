@@ -328,6 +328,13 @@ body {
     text-align: center;
 }
 
+.match-sets {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 2px;
+}
+
 .match-vs {
     font-size: 0.65rem;
     color: var(--text-dim);

@@ -407,6 +407,7 @@ function renderMatch(m) {
                         ${p1Result}
                     </div>
                     <div class="match-score-vs">${isCompleted && m.score ? m.score : 'vs'}</div>
+                    ${m.sets && isCompleted ? `<div class="match-sets">Sets: ${m.sets.replace(/[\[\]"]/g, '').replace(/,/g, ' - ')}</div>` : ''}
                     <div class="player">
                         <div class="player-name">
                             ${p2.name || 'TBD'}
@@ -502,7 +503,12 @@ function showModal(m) {
     const showResult = m.status === 'completed' && m.score;
 
     const setsHtml = (m.sets && m.status === 'completed') ? (() => {
-        const setList = m.sets.split(',').map(s => s.trim()).filter(Boolean);
+        let setList = [];
+        if (Array.isArray(m.sets)) {
+            setList = m.sets.map(s => `${s[0]}-${s[1]}`);
+        } else if (typeof m.sets === 'string') {
+            setList = m.sets.split(',').map(s => s.trim()).filter(Boolean);
+        }
         return setList.map(set => {
             const parts = set.split('-');
             if (parts.length !== 2) return `<div style="font-size:0.9rem;margin:2px 0">${set}</div>`;
