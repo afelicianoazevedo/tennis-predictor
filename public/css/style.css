@@ -186,13 +186,24 @@ body {
     color: white;
 }
 
-.date-label {
+.date-input {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 10px;
     font-size: 0.75rem;
     font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    min-width: 80px;
+    width: 130px;
     text-align: center;
+    outline: none;
+}
+
+.date-calendar-btn {
+    width: auto;
+    padding: 0 10px;
+    border-radius: 20px;
+    font-size: 0.9rem;
 }
 
 /* Content */

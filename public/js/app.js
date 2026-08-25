@@ -6,7 +6,7 @@ let currentFilter = 'all';
 let cachedData = {};
 let livePollInterval = null;
 let settings = { theme: 'dark', oddsFilter: 'all' };
-let selectedDate = new Date().toISOString().split('T')[0];
+let selectedDate = getLocalYMD(new Date());
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -211,19 +211,29 @@ function applyTheme(theme) {
     }
 }
 
-function updateDateLabel() {
-    const label = document.getElementById('date-label');
-    if (label) {
-        const d = new Date(selectedDate + 'T00:00:00');
-        label.textContent = d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' });
-    }
+function getLocalYMD(date) {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
-async function changeDate(delta) {
-    const d = new Date(selectedDate + 'T00:00:00');
-    d.setDate(d.getDate() + delta);
-    selectedDate = d.toISOString().split('T')[0];
-    updateDateLabel();
+function addDays(dateStr, delta) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    date.setDate(date.getDate() + delta);
+    return getLocalYMD(date);
+}
+
+function syncDateInput() {
+    const input = document.getElementById('date-input');
+    if (input) input.value = selectedDate;
+}
+
+async function applyDate(newDate) {
+    selectedDate = newDate;
+    syncDateInput();
     
     if (currentTab === 'matches') {
         loader(true);
@@ -238,6 +248,11 @@ async function changeDate(delta) {
         }
         renderFiltered();
     }
+}
+
+async function changeDate(delta) {
+    const newDate = addDays(selectedDate, delta);
+    await applyDate(newDate);
 }
 
 function statusLabel(s) {
@@ -948,7 +963,7 @@ async function switchTab(tab) {
     }
 
     if (tab === 'matches') {
-        updateDateLabel();
+        syncDateInput();
         loader(true);
         try {
             cachedData[tab] = await loadAllMatches(selectedDate);
@@ -1003,6 +1018,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('date-prev').addEventListener('click', () => changeDate(-1));
     document.getElementById('date-next').addEventListener('click', () => changeDate(1));
+
+    const dateInput = document.getElementById('date-input');
+    if (dateInput) {
+        dateInput.addEventListener('change', e => {
+            if (e.target.value) applyDate(e.target.value);
+        });
+        dateInput.addEventListener('blur', e => {
+            if (e.target.value && e.target.value !== selectedDate) applyDate(e.target.value);
+        });
+        dateInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && e.target.value) applyDate(e.target.value);
+        });
+    }
+
+    const dateCalendarBtn = document.getElementById('date-calendar');
+    if (dateCalendarBtn && dateInput) {
+        dateCalendarBtn.addEventListener('click', () => {
+            if (typeof dateInput.showPicker === 'function') {
+                dateInput.showPicker();
+            } else {
+                dateInput.focus();
+            }
+        });
+    }
 
     document.getElementById('setting-theme').addEventListener('change', e => {
         settings.theme = e.target.value;
