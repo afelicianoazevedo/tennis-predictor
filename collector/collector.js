@@ -11,9 +11,10 @@ const LIVE_API_KEY = fs.readFileSync(path.join(__dirname, '..', 'livetennisapi',
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
 const BASE_URL = 'https://api.livetennisapi.com/api/public/v1';
-
 const STATE_FILE = path.join(__dirname, 'state.json');
 const today = new Date().toISOString().split('T')[0];
+
+const MODE = process.argv[2] || 'upcoming'; // upcoming | live | finished
 
 let state = { dailyRequests: 0, lastResetDate: today, trackedIds: [], finishedQueue: [], lastFinishedCheck: {} };
 if (fs.existsSync(STATE_FILE)) {
@@ -120,52 +121,98 @@ function formatScore(match) {
     return null;
 }
 
-async function collect() {
-    console.log(`Collecting matches... (requests today: ${state.dailyRequests}/100)`);
-
-    const upcomingData = await liveRequest('/matches?status=upcoming&limit=100');
-    const liveData = await liveRequest('/matches?status=live&limit=100');
-
-    const upcoming = upcomingData?.data || [];
-    const live = liveData?.data || [];
-
-    console.log(`Found ${upcoming.length} upcoming, ${live.length} live`);
-
+async function collectUpcoming() {
+    console.log('Mode: upcoming');
+    const data = await liveRequest('/matches?status=upcoming&limit=100');
+    const matches = data?.data || [];
     const currentIds = new Set();
 
-    for (const match of [...upcoming, ...live]) {
-        const id = match.id;
-        currentIds.add(id);
+    for (const match of matches) {
+        currentIds.add(match.id);
         await supabaseUpsert(match);
     }
 
     state.trackedIds = [...currentIds];
-    state.finishedQueue = state.finishedQueue || [];
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log(`Upcoming: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
+}
+
+async function collectLive() {
+    console.log('Mode: live');
+    const data = await liveRequest('/matches?status=live&limit=100');
+    const matches = data?.data || [];
+    const currentIds = new Set();
+
+    for (const match of matches) {
+        currentIds.add(match.id);
+        await supabaseUpsert(match);
+    }
+
+    state.trackedIds = [...currentIds];
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    console.log(`Live: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
+}
+
+async function collectFinished() {
+    console.log('Mode: finished');
+    const finishedBudget = Math.max(0, 100 - state.dailyRequests);
+    if (finishedBudget < 3) {
+        console.log(`No budget for finished checks (used ${state.dailyRequests}/100).`);
+        return;
+    }
 
     const previousIds = new Set(state.trackedIds || []);
-    const finishedIds = [...previousIds].filter(id => !currentIds.has(id));
+    const finishedIds = [...previousIds].filter(id => !isCurrentlyActive(id));
 
-    if (finishedIds.length > 0) {
-        const finishedBudget = Math.max(0, 100 - state.dailyRequests);
-        const MAX_FINISHED_PER_RUN = 20;
-        const toCheck = finishedIds.slice(0, Math.min(finishedIds.length, MAX_FINISHED_PER_RUN, finishedBudget - 2));
-        console.log(`Checking ${toCheck.length}/${finishedIds.length} finished matches (budget ${finishedBudget})...`);
+    if (finishedIds.length === 0) {
+        console.log('No finished matches to check.');
+        return;
+    }
 
-        for (const id of toCheck) {
-            if (state.dailyRequests >= 100) break;
-            const detail = await liveRequest(`/matches/${id}`);
-            if (detail?.data) {
-                await supabaseUpsert(detail.data);
-            }
+    const MAX_FINISHED_PER_RUN = 20;
+    const toCheck = finishedIds.slice(0, Math.min(finishedIds.length, MAX_FINISHED_PER_RUN, finishedBudget - 2));
+    console.log(`Checking ${toCheck.length}/${finishedIds.length} finished matches (budget ${finishedBudget})...`);
+
+    for (const id of toCheck) {
+        if (state.dailyRequests >= 100) break;
+        const detail = await liveRequest(`/matches/${id}`);
+        if (detail?.data) {
+            await supabaseUpsert(detail.data);
         }
     }
 
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-
-    console.log(`Done. Daily requests used: ${state.dailyRequests}/100`);
+    console.log(`Finished: processed ${toCheck.length}. Requests: ${state.dailyRequests}/100`);
 }
 
-collect().catch(err => {
+async function isCurrentlyActive(id) {
+    const upcoming = await liveRequest('/matches?status=upcoming&limit=100');
+    const live = await liveRequest('/matches?status=live&limit=100');
+    const ids = new Set([
+        ...(upcoming?.data || []).map(m => m.id),
+        ...(live?.data || []).map(m => m.id)
+    ]);
+    return ids.has(id);
+}
+
+async function main() {
+    switch (MODE) {
+        case 'upcoming':
+            await collectUpcoming();
+            break;
+        case 'live':
+            await collectLive();
+            break;
+        case 'finished':
+            await collectFinished();
+            break;
+        default:
+            console.error(`Unknown mode: ${MODE}. Use upcoming, live, or finished.`);
+            process.exit(1);
+    }
+}
+
+main().catch(err => {
     console.error(err);
     process.exit(1);
 });

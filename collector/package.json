@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node collector.js"
+    "start": "node collector.js",
+    "odds": "node odds.js",
+    "cleanup": "node cleanup.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5"
