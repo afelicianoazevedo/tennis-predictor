@@ -6,6 +6,7 @@ let currentFilter = 'all';
 let cachedData = {};
 let livePollInterval = null;
 let settings = { theme: 'dark', oddsFilter: 'all' };
+let selectedDate = new Date().toISOString().split('T')[0];
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -73,12 +74,12 @@ async function loadResults() {
     return data.filter(m => m.score && m.score !== '0-0');
 }
 
-async function loadAllMatches() {
-    const today = new Date().toISOString().split('T')[0];
-    const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
+async function loadAllMatches(date) {
+    const d = date || selectedDate;
+    const next = new Date(new Date(d).getTime() + 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
-        gte: { scheduled_at: today }, lte: { scheduled_at: max }, limit: 500,
+        gte: { scheduled_at: d }, lte: { scheduled_at: next }, limit: 500,
         eq: { status: 'upcoming' }
     });
     return data;
@@ -207,6 +208,35 @@ function applyTheme(theme) {
         document.documentElement.style.setProperty('--text', '#f1f5f9');
         document.documentElement.style.setProperty('--text-dim', '#94a3b8');
         document.documentElement.style.setProperty('--border', '#334155');
+    }
+}
+
+function updateDateLabel() {
+    const label = document.getElementById('date-label');
+    if (label) {
+        const d = new Date(selectedDate + 'T00:00:00');
+        label.textContent = d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+}
+
+async function changeDate(delta) {
+    const d = new Date(selectedDate + 'T00:00:00');
+    d.setDate(d.getDate() + delta);
+    selectedDate = d.toISOString().split('T')[0];
+    updateDateLabel();
+    
+    if (currentTab === 'matches') {
+        loader(true);
+        try {
+            cachedData[currentTab] = await loadAllMatches(selectedDate);
+            log('Loaded ' + (cachedData[currentTab]?.length || 0) + ' matches for ' + selectedDate);
+        } catch (e) {
+            log('ERROR loading matches: ' + e.message);
+            toast('Erro: ' + e.message);
+        } finally {
+            loader(false);
+        }
+        renderFiltered();
     }
 }
 
@@ -889,11 +919,40 @@ async function switchTab(tab) {
         return;
     }
 
-    if (tab === 'matches') {
+    if (tab === 'live') {
         loader(true);
         try {
-            cachedData[tab] = await loadAllMatches();
-            log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches');
+            cachedData[tab] = await loadLive();
+            log('Loaded ' + (cachedData[tab]?.length || 0) + ' live matches');
+        } catch (e) {
+            log('ERROR loading live: ' + e.message);
+            toast('Erro: ' + e.message);
+        } finally {
+            loader(false);
+        }
+        renderFiltered();
+        
+        livePollInterval = setInterval(async () => {
+            log('Polling live matches...');
+            try {
+                const data = await loadLive();
+                cachedData['live'] = data;
+                if (currentTab === 'live') {
+                    renderFiltered();
+                }
+            } catch (e) {
+                log('Poll error: ' + e.message);
+            }
+        }, 30000);
+        return;
+    }
+
+    if (tab === 'matches') {
+        updateDateLabel();
+        loader(true);
+        try {
+            cachedData[tab] = await loadAllMatches(selectedDate);
+            log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + selectedDate);
         } catch (e) {
             log('ERROR loading matches: ' + e.message);
             toast('Erro: ' + e.message);
@@ -941,6 +1000,9 @@ document.addEventListener('DOMContentLoaded', () => {
             renderFiltered();
         });
     });
+
+    document.getElementById('date-prev').addEventListener('click', () => changeDate(-1));
+    document.getElementById('date-next').addEventListener('click', () => changeDate(1));
 
     document.getElementById('setting-theme').addEventListener('change', e => {
         settings.theme = e.target.value;

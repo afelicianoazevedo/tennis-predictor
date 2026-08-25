@@ -158,6 +158,43 @@ body {
     color: var(--text);
 }
 
+.date-selector {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.date-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.date-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.date-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    min-width: 80px;
+    text-align: center;
+}
+
 /* Content */
 .content {
     padding: 12px;

@@ -23,6 +23,10 @@
         </header>
 
         <nav class="tabs">
+            <button class="tab" data-tab="live">
+                <span class="tab-icon">🔴</span>
+                <span class="tab-label">Live</span>
+            </button>
             <button class="tab active" data-tab="matches">
                 <span class="tab-icon">🎾</span>
                 <span class="tab-label">Jogos</span>
@@ -46,6 +50,11 @@
             <button class="filter" data-filter="men">♂ Homens</button>
             <button class="filter" data-filter="women">♀ Mulheres</button>
             <button class="filter" data-filter="doubles">⇄ Pares</button>
+            <div class="date-selector">
+                <button class="date-btn" id="date-prev">&lt;</button>
+                <span class="date-label" id="date-label"></span>
+                <button class="date-btn" id="date-next">&gt;</button>
+            </div>
         </div>
 
         <main class="content">
