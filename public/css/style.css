@@ -199,6 +199,13 @@ body {
     outline: none;
 }
 
+.date-eu {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+
 /* Content */
 .content {
     padding: 12px;

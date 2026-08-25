@@ -79,25 +79,60 @@ async function loadAllMatches(date) {
     const next = addDays(d, 1);
     const start = d + 'T00:00:00';
     const end = next + 'T00:00:00';
-    
-    const [upcoming, completed] = await Promise.all([
-        api('matches', {
+    const today = getLocalYMD(new Date());
+    const isPast = d < today;
+
+    let upcoming = [];
+    let completed = [];
+
+    if (!isPast) {
+        upcoming = await api('matches', {
             select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
             gte: { scheduled_at: start }, lt: { scheduled_at: end },
             eq: { status: 'upcoming' }
-        }),
-        api('matches', {
-            select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
-            gte: { scheduled_at: start }, lt: { scheduled_at: end },
-            eq: { status: 'completed' }
-        })
-    ]);
-    
+        });
+    }
+
+    completed = await api('matches', {
+        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT}`,
+        gte: { scheduled_at: start }, lt: { scheduled_at: end },
+        eq: { status: 'completed' }
+    });
+
     const all = [...(upcoming || []), ...(completed || [])];
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
         return matchDate === d;
     });
+}
+
+async function cleanupOrphanMatches() {
+    const today = getLocalYMD(new Date());
+    try {
+        const orphans = await api('matches', {
+            select: 'id,scheduled_at',
+            lt: { scheduled_at: today + 'T00:00:00' },
+            eq: { status: 'upcoming' }
+        });
+
+        if (!orphans || orphans.length === 0) return;
+
+        const ids = orphans.map(m => m.id).filter(Boolean);
+        if (ids.length === 0) return;
+
+        await fetch(`${SUPABASE_URL}/rest/v1/matches?id=in.(${ids.join(',')})`, {
+            method: 'DELETE',
+            headers: {
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        log(`Cleaned up ${ids.length} orphan upcoming matches from past dates`);
+    } catch (e) {
+        console.error('Cleanup failed:', e);
+    }
 }
 
 async function loadStats(period = 'all') {
@@ -246,9 +281,18 @@ function syncDateInput() {
     if (input) input.value = selectedDate;
 }
 
+function syncDateEuLabel() {
+    const el = document.getElementById('date-eu');
+    if (el && selectedDate) {
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        el.textContent = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+    }
+}
+
 async function applyDate(newDate) {
     selectedDate = newDate;
     syncDateInput();
+    syncDateEuLabel();
     
     if (currentTab === 'matches') {
         loader(true);
@@ -979,6 +1023,8 @@ async function switchTab(tab) {
 
     if (tab === 'matches') {
         syncDateInput();
+        syncDateEuLabel();
+        await cleanupOrphanMatches();
         loader(true);
         try {
             cachedData[tab] = await loadAllMatches(selectedDate);
@@ -1078,6 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
 
+    syncDateEuLabel();
     log('Initialization complete, loading matches...');
     switchTab('matches');
 });
