@@ -55,6 +55,12 @@ async function supabaseUpsert(match) {
     const externalId = String(match.id);
     const scheduledAt = parseApiDate(match.scheduled_time || match.start_time);
 
+    const p1 = match.players?.p1 || {};
+    const p2 = match.players?.p2 || {};
+
+    const player1Id = await syncPlayer(p1);
+    const player2Id = await syncPlayer(p2);
+
     const payload = {
         api_id: externalId,
         scheduled_at: scheduledAt,
@@ -63,9 +69,11 @@ async function supabaseUpsert(match) {
         sets: match.score?.sets ? JSON.stringify(match.score.sets) : null,
         round: match.round || null,
         surface: match.surface || null,
-        player1_name: match.players?.p1?.name || null,
-        player2_name: match.players?.p2?.name || null,
-        tournament_name: match.tournament?.name || null
+        player1_name: p1.name || null,
+        player2_name: p2.name || null,
+        tournament_name: match.tournament?.name || null,
+        player1_id: player1Id,
+        player2_id: player2Id
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
@@ -105,6 +113,58 @@ async function supabaseUpsert(match) {
     });
 }
 
+async function syncPlayer(player) {
+    if (!player || !player.id || !player.name) return null;
+
+    const apiId = String(player.id);
+    const name = player.name;
+    const ranking = player.ranking || null;
+    const gender = player.gender || null;
+
+    let res = await fetch(`${SUPABASE_URL}/rest/v1/players?api_id=eq.${apiId}`, {
+        method: 'GET',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+    });
+
+    let existing = [];
+    if (res.ok) {
+        existing = await res.json();
+    }
+
+    if (existing.length > 0) {
+        await fetch(`${SUPABASE_URL}/rest/v1/players?api_id=eq.${apiId}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name, ranking, gender })
+        });
+        return existing[0].id;
+    }
+
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/players`, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ api_id: apiId, name, ranking, gender })
+    });
+
+    if (!insertRes.ok) {
+        return null;
+    }
+
+    const inserted = await insertRes.json();
+    return inserted.id || inserted[0]?.id || null;
+}
+
 function mapStatus(status) {
     const s = (status || '').toLowerCase();
     if (s === 'live' || s === 'inprogress' || s === 'in_progress') return 'live';
@@ -140,6 +200,7 @@ async function collectUpcoming() {
     state.trackedIds = [...currentIds];
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
     console.log(`Upcoming: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
+    await triggerPredictions();
 }
 
 async function collectLive() {
@@ -161,6 +222,7 @@ async function collectLive() {
     state.trackedIds = [...currentIds];
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
     console.log(`Live: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
+    await triggerPredictions();
 }
 
 async function collectFinished() {
@@ -214,6 +276,7 @@ async function collectFinished() {
 
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
     console.log(`Finished: processed ${toCheck.length}. Requests: ${state.dailyRequests}/100`);
+    await triggerPredictions();
 }
 
 async function collectOdds() {
@@ -295,6 +358,24 @@ async function collectOdds() {
     console.log(`Odds: matched ${matched}/${oddsData.length}. Requests: ${state.dailyRequests}/100`);
 }
 
+async function triggerPredictions() {
+    if (state.dailyRequests >= 100) return;
+    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming?apikey=${SUPABASE_KEY}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    if (res.ok) {
+        console.log('Predictions triggered');
+    } else {
+        console.error('Failed to trigger predictions:', res.status);
+    }
+}
+
 function normalizeTeamName(name) {
     return name
         .toLowerCase()
@@ -369,6 +450,24 @@ async function saveOdds(matchId, player1Name, player2Name, odd1, odd2, commenceT
 
     if (!res.ok) {
         console.error(`Failed to save odds for match ${matchId}: ${res.status} ${await res.text()}`);
+    }
+}
+
+async function triggerPredictions() {
+    if (state.dailyRequests >= 100) return;
+    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming?apikey=${SUPABASE_KEY}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+        }
+    });
+    if (res.ok) {
+        console.log('Predictions triggered');
+    } else {
+        console.error('Failed to trigger predictions:', res.status);
     }
 }
 
