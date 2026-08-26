@@ -39,10 +39,11 @@ const TOUR_SELECT = 'tournament:tournaments(name)';
 const NAME_SELECT = 'player1_name,player2_name,tournament_name';
 
 async function loadLive() {
-    return api('matches', {
+    const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         eq: { status: 'live' }, order: 'scheduled_at.asc'
     });
+    return filterValidMatches(data || []);
 }
 
 async function loadToday() {
@@ -53,7 +54,7 @@ async function loadToday() {
         gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
         eq: { status: 'upcoming' }
     });
-    return data;
+    return filterValidMatches(data || []);
 }
 
 async function loadUpcoming() {
@@ -64,7 +65,7 @@ async function loadUpcoming() {
         gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
         eq: { status: 'upcoming' }
     });
-    return data;
+    return filterValidMatches(data || []);
 }
 
 async function loadResults() {
@@ -73,7 +74,15 @@ async function loadResults() {
         select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
     });
-    return data.filter(m => m.score && m.score !== '0-0');
+    return filterValidMatches(data || []).filter(m => m.score && m.score !== '0-0');
+}
+
+function filterValidMatches(matches) {
+    return matches.filter(m => {
+        if (m.confidence_score == null) return false;
+        if (m.confidence_score === 50) return false;
+        return true;
+    });
 }
 
 async function loadAllMatches(date) {
@@ -110,9 +119,17 @@ async function loadAllMatches(date) {
 
     const all = [...(upcoming || []), ...(completed || []), ...(live || [])];
     log(`loadAllMatches(${d}): upcoming=${upcoming?.length || 0}, completed=${completed?.length || 0}, live=${live?.length || 0}, total=${all.length}`);
+
+    const odds = await api('odds', { select: 'match_id' });
+    const oddsMatchIds = new Set((odds || []).map(o => o.match_id).filter(Boolean));
+
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
-        return matchDate === d;
+        if (matchDate !== d) return false;
+        if (m.confidence_score == null) return false;
+        if (m.confidence_score === 50) return false;
+        if (!oddsMatchIds.has(m.id)) return false;
+        return true;
     });
 }
 
