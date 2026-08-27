@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "start": "node collector.js schedule",
+    "start:single": "node collector.js schedule 179522",
     "upcoming": "node collector.js upcoming",
     "live": "node collector.js live",
     "results": "node collector.js results",

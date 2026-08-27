@@ -25,7 +25,8 @@ let state = {
     previousLiveIds: [],
     lastUpcomingRun: null,
     lastLiveRun: null,
-    processedMatchIds: {}
+    processedMatchIds: {},
+    singleTestMatchId: process.argv[3] || null
 };
 if (fs.existsSync(STATE_FILE)) {
     state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -343,6 +344,13 @@ async function collectResults(candidateIds) {
         });
 
     const toCheck = sorted.slice(0, Math.min(sorted.length, resultsBudget));
+    if (state.singleTestMatchId) {
+        const singleIndex = toCheck.findIndex(m => String(m.id) === String(state.singleTestMatchId));
+        if (singleIndex >= 0) {
+            toCheck.length = 0;
+            toCheck.push(sorted[singleIndex]);
+        }
+    }
     console.log(`Results: verifying ${toCheck.length}/${unprocessed.length} matches (budget ${resultsBudget})...`);
 
     let verified = 0;
@@ -592,6 +600,9 @@ function markProcessed(matchId) {
 
 async function runSchedule() {
     console.log('Starting collector scheduler...');
+    if (state.singleTestMatchId) {
+        console.log(`[Scheduler] Single test mode enabled for match ${state.singleTestMatchId}`);
+    }
 
     cron.schedule('0 0 * * *', async () => {
         const runDate = new Date().toISOString().split('T')[0];
