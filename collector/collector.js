@@ -381,6 +381,34 @@ async function collectOdds() {
             }
         }
 
+        if (!bestMatchId) {
+            for (const [id, names] of matchMap) {
+                const p1Surname = names.p1.split(' ').pop();
+                const p2Surname = names.p2.split(' ').pop();
+                const oddsP1Surname = p1Name.split(' ').pop();
+                const oddsP2Surname = p2Name.split(' ').pop();
+                const surnameScore = (calculateSimilarity(oddsP1Surname, p1Surname) + calculateSimilarity(oddsP2Surname, p2Surname)) / 2;
+                if (surnameScore > bestScore) {
+                    bestScore = surnameScore;
+                    bestMatchId = id;
+                }
+            }
+        }
+
+        if (!bestMatchId) {
+            for (const [id, names] of matchMap) {
+                const p1First = names.p1.split(' ')[0];
+                const p2First = names.p2.split(' ')[0];
+                const oddsP1First = p1Name.split(' ')[0];
+                const oddsP2First = p2Name.split(' ')[0];
+                const firstScore = (calculateSimilarity(oddsP1First, p1First) + calculateSimilarity(oddsP2First, p2First)) / 2;
+                if (firstScore > bestScore) {
+                    bestScore = firstScore;
+                    bestMatchId = id;
+                }
+            }
+        }
+
         if (bestMatchId) {
             await saveOdds(bestMatchId, p1Name, p2Name, p1Odd.price, p2Odd.price, commenceTime);
             matched++;

@@ -34,7 +34,7 @@ async function api(table, opts = {}) {
     return res.json();
 }
 
-const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender)';
+const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender,elo_rating),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender,elo_rating)';
 const TOUR_SELECT = 'tournament:tournaments(name)';
 const NAME_SELECT = 'player1_name,player2_name,tournament_name,category';
 
@@ -558,7 +558,7 @@ function showModal(m) {
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px">
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p1Name}</div>
-                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''} ${p1.elo_rating && p1.elo_rating !== 1500 ? '(ELO ' + Math.round(p1.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p1" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob.toFixed(1)}%</span>` : ''}
             </div>
@@ -568,7 +568,7 @@ function showModal(m) {
             </div>
             <div style="text-align:center;flex:1">
                 <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2Name}</div>
-                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}</div>
+                <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''} ${p2.elo_rating && p2.elo_rating !== 1500 ? '(ELO ' + Math.round(p2.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p2" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob.toFixed(1)}%</span>` : ''}
             </div>
