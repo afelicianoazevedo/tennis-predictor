@@ -328,6 +328,13 @@ async function collectOdds() {
     const supabaseMatches = await matchesRes.json();
     let matched = 0;
 
+    const matchMap = new Map();
+    for (const m of supabaseMatches) {
+        const p1 = m.player1_name || '';
+        const p2 = m.player2_name || '';
+        matchMap.set(m.id, { p1, p2 });
+    }
+
     for (const event of oddsData) {
         const p1Name = event.home_team;
         const p2Name = event.away_team;
@@ -335,28 +342,32 @@ async function collectOdds() {
 
         if (!p1Name || !p2Name) continue;
 
-        const candidates = supabaseMatches.map(m => ({
-            id: m.id,
-            name: `${m.player1_name || ''} ${m.player2_name || ''}`.trim()
-        }));
+        const bookmakers = event.bookmakers || [];
+        if (bookmakers.length === 0) continue;
+        const markets = bookmakers[0].markets || [];
+        if (markets.length === 0) continue;
+        const outcomes = markets[0].outcomes || [];
+        const p1Odd = outcomes.find(o => o.name === p1Name);
+        const p2Odd = outcomes.find(o => o.name === p2Name);
 
-        const bestMatch = findBestMatch(p1Name, candidates);
+        if (!p1Odd || !p2Odd) continue;
 
-        if (bestMatch) {
-            const bookmakers = event.bookmakers || [];
-            if (bookmakers.length > 0) {
-                const markets = bookmakers[0].markets || [];
-                if (markets.length > 0) {
-                    const outcomes = markets[0].outcomes || [];
-                    const p1Odd = outcomes.find(o => o.name === p1Name);
-                    const p2Odd = outcomes.find(o => o.name === p2Name);
+        let bestMatchId = null;
+        let bestScore = 0.5;
 
-                    if (p1Odd && p2Odd) {
-                        await saveOdds(bestMatch.id, p1Name, p2Name, p1Odd.price, p2Odd.price, commenceTime);
-                        matched++;
-                    }
-                }
+        for (const [id, names] of matchMap) {
+            const score1 = calculateSimilarity(p1Name, names.p1);
+            const score2 = calculateSimilarity(p2Name, names.p2);
+            const avgScore = (score1 + score2) / 2;
+            if (avgScore > bestScore) {
+                bestScore = avgScore;
+                bestMatchId = id;
             }
+        }
+
+        if (bestMatchId) {
+            await saveOdds(bestMatchId, p1Name, p2Name, p1Odd.price, p2Odd.price, commenceTime);
+            matched++;
         }
     }
 
