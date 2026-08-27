@@ -1,0 +1,68 @@
+name: Tennis Collector
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 12 * * *'
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Collection mode'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - upcoming
+          - live
+          - results
+          - odds
+          - schedule
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      LIVETENNIS_API_KEY: ${{ secrets.LIVETENNIS_API_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: collector
+        run: npm ci
+
+      - name: Run collector
+        working-directory: collector
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          LIVETENNIS_API_KEY: ${{ secrets.LIVETENNIS_API_KEY }}
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          else
+            MINUTE=$(date -u +%M)
+            HOUR=$(date -u +%H)
+            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
+              MODE="upcoming"
+            elif [ "$MINUTE" == "00" ]; then
+              MODE="live"
+            else
+              MODE="schedule"
+            fi
+          fi
+          echo "Running collector in mode: $MODE"
+          node collector.js $MODE
+        continue-on-error: true
