@@ -268,6 +268,14 @@ body {
 .match.c-tendency { border-left-color: var(--c-tendency); }
 .match.c-strong { border-left-color: var(--c-strong); }
 
+.match.is-completed {
+    background: #253347;
+}
+
+.match.is-completed:hover {
+    background: #2a3a52;
+}
+
 .match-time {
     display: flex !important;
     flex-direction: column !important;

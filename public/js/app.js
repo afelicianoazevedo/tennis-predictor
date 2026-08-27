@@ -4,7 +4,6 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 let currentTab = 'matches';
 let currentFilter = 'all';
 let cachedData = {};
-let livePollInterval = null;
 let matchesPollInterval = null;
 let settings = { theme: 'dark', oddsFilter: 'all', predictionFilter: 'all' };
 let selectedDate = getLocalYMD(new Date());
@@ -37,14 +36,6 @@ async function api(table, opts = {}) {
 const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender,elo_rating),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender,elo_rating)';
 const TOUR_SELECT = 'tournament:tournaments(name)';
 const NAME_SELECT = 'player1_name,player2_name,tournament_name,category';
-
-async function loadLive() {
-    const data = await api('matches', {
-        select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        eq: { status: 'live' }, order: 'scheduled_at.asc'
-    });
-    return data || [];
-}
 
 async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
@@ -127,7 +118,7 @@ async function loadAllMatches(date) {
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
         if (matchDate !== d) return false;
-        if (m.confidence_score === 50) return false;
+        if (m.status !== 'completed' && m.confidence_score === 50) return false;
         return true;
     });
 }
@@ -417,7 +408,7 @@ function renderMatch(m) {
     const p2Info = `${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}`;
 
     return `
-        <div class="match c-${cc} ${isLive ? 'is-live' : ''}" data-id="${m.id}">
+        <div class="match c-${cc} ${isCompleted ? 'is-completed' : ''}" data-id="${m.id}">
             <div class="match-time">
                 <span class="match-date-short">${dateShort(m.scheduled_at)}</span>
                 <span class="match-time-text">${time(m.scheduled_at)}</span>
@@ -1076,11 +1067,6 @@ async function switchTab(tab) {
     const panel = document.getElementById(`tab-${tab}`);
     if (panel) panel.classList.add('active');
 
-    if (livePollInterval) {
-        clearInterval(livePollInterval);
-        livePollInterval = null;
-    }
-
     if (matchesPollInterval) {
         clearInterval(matchesPollInterval);
         matchesPollInterval = null;
@@ -1097,36 +1083,6 @@ async function switchTab(tab) {
         } finally {
             loader(false);
         }
-        return;
-    }
-
-    if (tab === 'live') {
-        loader(true);
-        try {
-            cachedData[tab] = await loadLive();
-            detectStatusChanges(cachedData[tab]);
-            log('Loaded ' + (cachedData[tab]?.length || 0) + ' live matches');
-        } catch (e) {
-            log('ERROR loading live: ' + e.message);
-            toast('Erro: ' + e.message);
-        } finally {
-            loader(false);
-        }
-        renderFiltered();
-        
-        livePollInterval = setInterval(async () => {
-            log('Polling live matches...');
-            try {
-                const data = await loadLive();
-                cachedData['live'] = data;
-                detectStatusChanges(data);
-                if (currentTab === 'live') {
-                    renderFiltered();
-                }
-            } catch (e) {
-                log('Poll error: ' + e.message);
-            }
-        }, 30000);
         return;
     }
 
