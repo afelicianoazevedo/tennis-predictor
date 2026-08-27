@@ -43,18 +43,19 @@ async function loadLive() {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
         eq: { status: 'live' }, order: 'scheduled_at.asc'
     });
-    return filterValidMatches(data || []);
+    return data || [];
 }
 
 async function loadToday() {
     const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        gte: { scheduled_at: today }, lte: { scheduled_at: tomorrow },
-        eq: { status: 'upcoming' }
+        eq: { status: 'upcoming' }, order: 'scheduled_at.asc', limit: 500
     });
-    return filterValidMatches(data || []);
+    return (data || []).filter(m => {
+        const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+        return matchDate === today;
+    });
 }
 
 async function loadUpcoming() {
@@ -62,34 +63,25 @@ async function loadUpcoming() {
     const max = new Date(Date.now() + 3 * 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        gte: { scheduled_at: tomorrow }, lte: { scheduled_at: max }, limit: 200,
-        eq: { status: 'upcoming' }
+        eq: { status: 'upcoming' }, order: 'scheduled_at.asc', limit: 500
     });
-    return filterValidMatches(data || []);
+    return (data || []).filter(m => {
+        const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+        return matchDate >= tomorrow && matchDate <= max;
+    });
 }
 
 async function loadResults() {
     const week = new Date(Date.now() - 7 * 864e5).toISOString().split('T')[0];
     const data = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        eq: { status: 'completed' }, gte: { scheduled_at: week }, order: 'scheduled_at.desc'
+        eq: { status: 'completed' }, order: 'scheduled_at.desc', limit: 500
     });
-    return filterValidMatches(data || []).filter(m => m.score && m.score !== '0-0');
-}
-
-function filterValidMatches(matches) {
-    return matches.filter(m => {
-        if (m.confidence_score == null) return false;
-        if (m.confidence_score === 50) return false;
-        return true;
-    });
+    return (data || []).filter(m => m.score && m.score !== '0-0' && m.scheduled_at && m.scheduled_at.split('T')[0] >= week);
 }
 
 async function loadAllMatches(date) {
     const d = date || selectedDate;
-    const next = addDays(d, 1);
-    const start = d + 'T00:00:00';
-    const end = next + 'T00:00:00';
     const today = getLocalYMD(new Date());
     const isPast = d < today;
 
@@ -100,35 +92,27 @@ async function loadAllMatches(date) {
     if (!isPast) {
         upcoming = await api('matches', {
             select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-            gte: { scheduled_at: start }, lt: { scheduled_at: end },
-            eq: { status: 'upcoming' }
+            eq: { status: 'upcoming' }, order: 'scheduled_at.asc', limit: 500
         });
     }
 
     completed = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        gte: { scheduled_at: start }, lt: { scheduled_at: end },
-        eq: { status: 'completed' }
+        eq: { status: 'completed' }, order: 'scheduled_at.desc', limit: 500
     });
 
     live = await api('matches', {
         select: `id,scheduled_at,status,round,surface,score,sets,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
-        gte: { scheduled_at: start }, lt: { scheduled_at: end },
-        eq: { status: 'live' }
+        eq: { status: 'live' }, order: 'scheduled_at.asc', limit: 500
     });
 
     const all = [...(upcoming || []), ...(completed || []), ...(live || [])];
     log(`loadAllMatches(${d}): upcoming=${upcoming?.length || 0}, completed=${completed?.length || 0}, live=${live?.length || 0}, total=${all.length}`);
 
-    const odds = await api('odds', { select: 'match_id' });
-    const oddsMatchIds = new Set((odds || []).map(o => o.match_id).filter(Boolean));
-
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
         if (matchDate !== d) return false;
-        if (m.confidence_score == null) return false;
         if (m.confidence_score === 50) return false;
-        if (!oddsMatchIds.has(m.id)) return false;
         return true;
     });
 }
@@ -136,10 +120,14 @@ async function loadAllMatches(date) {
 async function cleanupOrphanMatches() {
     const today = getLocalYMD(new Date());
     try {
-        const orphans = await api('matches', {
+        const allUpcoming = await api('matches', {
             select: 'id,scheduled_at',
-            lt: { scheduled_at: today + 'T00:00:00' },
-            eq: { status: 'upcoming' }
+            eq: { status: 'upcoming' }, order: 'scheduled_at.asc', limit: 1000
+        });
+
+        const orphans = (allUpcoming || []).filter(m => {
+            const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+            return matchDate < today;
         });
 
         if (!orphans || orphans.length === 0) return;
