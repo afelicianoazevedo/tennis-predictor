@@ -46,14 +46,16 @@
         </nav>
 
         <div class="filters">
-            <button class="filter active" data-filter="all">ALL</button>
-            <button class="filter" data-filter="men">M</button>
-            <button class="filter" data-filter="women">W</button>
-            <button class="filter" data-filter="doubles">D</button>
+            <div class="filter-group">
+                <button class="filter active" data-filter="all">ALL</button>
+                <button class="filter" data-filter="men">M</button>
+                <button class="filter" data-filter="women">W</button>
+                <button class="filter" data-filter="doubles">D</button>
+            </div>
+            <span class="match-counter" id="match-counter">0</span>
             <div class="date-selector">
                 <button class="date-btn" id="date-prev">&lt;</button>
                 <input type="text" id="date-input" class="date-input" placeholder="dd/mm/yyyy" maxlength="10" inputmode="numeric">
-                <span class="match-counter" id="match-counter">0</span>
                 <button class="date-btn" id="date-next">&gt;</button>
                 <button class="date-btn date-refresh-btn" id="date-refresh" title="Atualizar">↻</button>
             </div>
