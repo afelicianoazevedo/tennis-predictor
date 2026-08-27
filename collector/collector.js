@@ -579,14 +579,9 @@ function markProcessed(matchId) {
 async function runSchedule() {
     console.log('Starting collector scheduler...');
 
-    const isAlreadyRun = (lastRun) => {
-        if (!lastRun) return false;
-        const lastDate = new Date(lastRun).toISOString().split('T')[0];
-        return lastDate === today;
-    };
-
     cron.schedule('0 0 * * *', async () => {
-        if (isAlreadyRun(state.lastUpcomingRun)) return;
+        const runDate = new Date().toISOString().split('T')[0];
+        if (state.lastUpcomingRun && state.lastUpcomingRun.startsWith(runDate)) return;
         console.log('[Scheduler] Running upcoming collection (00:00)...');
         state.dailyRequests = 0;
         state.lastResetDate = today;
@@ -594,7 +589,8 @@ async function runSchedule() {
     });
 
     cron.schedule('0 12 * * *', async () => {
-        if (isAlreadyRun(state.lastUpcomingRun)) return;
+        const runDate = new Date().toISOString().split('T')[0];
+        if (state.lastUpcomingRun && state.lastUpcomingRun.startsWith(runDate)) return;
         console.log('[Scheduler] Running upcoming collection (12:00)...');
         state.dailyRequests = 0;
         state.lastResetDate = today;
@@ -602,7 +598,6 @@ async function runSchedule() {
     });
 
     cron.schedule('0 * * * *', async () => {
-        if (isAlreadyRun(state.lastLiveRun)) return;
         console.log('[Scheduler] Running live collection...');
         state.dailyRequests = 0;
         state.lastResetDate = today;
