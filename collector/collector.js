@@ -46,7 +46,7 @@ function saveState() {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
-async function liveRequest(endpoint) {
+async function liveRequest(endpoint, retries = 3) {
     if (state.dailyRequests >= 100) {
         console.log('Daily limit reached (100 requests). Skipping.');
         return null;
@@ -55,6 +55,19 @@ async function liveRequest(endpoint) {
     const res = await fetch(url, {
         headers: { 'X-API-Key': LIVE_API_KEY }
     });
+    
+    if (res.status === 429) {
+        if (retries > 0) {
+            const waitTime = Math.pow(2, 3 - retries) * 1000;
+            console.log(`Rate limited. Waiting ${waitTime}ms before retry...`);
+            await new Promise(r => setTimeout(r, waitTime));
+            return liveRequest(endpoint, retries - 1);
+        }
+        console.error(`API error 429: ${endpoint} (max retries reached)`);
+        state.dailyRequests++;
+        return null;
+    }
+    
     state.dailyRequests++;
     if (!res.ok) {
         console.error(`API error ${res.status}: ${endpoint}`);
@@ -344,6 +357,7 @@ async function collectResults(candidateIds) {
                 verified++;
             }
         }
+        await new Promise(r => setTimeout(r, 500));
     }
 
     console.log(`Results: verified ${verified} completed matches. Requests: ${state.dailyRequests}/100`);
