@@ -75,7 +75,7 @@ async function supabaseUpsert(match) {
         tournament_name: match.tournament?.name || null,
         player1_id: player1Id,
         player2_id: player2Id,
-        category: getCategory(p1.name, p2.name, p1.gender, p2.gender)
+        category: getCategory(match, p1.name, p2.name)
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
@@ -188,12 +188,19 @@ function formatScore(match) {
     return null;
 }
 
-function getCategory(p1Name, p2Name, p1Gender, p2Gender) {
-    if ((p1Name && p1Name.includes('/')) || (p2Name && p2Name.includes('/'))) {
+function getCategory(match, p1Name, p2Name) {
+    if (match.is_doubles || (p1Name && p1Name.includes('/')) || (p2Name && p2Name.includes('/'))) {
         return 'D';
     }
-    const gender = p1Gender || p2Gender || 'M';
-    return gender.toUpperCase() === 'F' ? 'W' : 'M';
+    const tour = (match.tour || '').toLowerCase();
+    const tournament = (match.tournament || '').toLowerCase();
+    if (tour === 'wta' || tournament.startsWith('w') || tournament.includes('women') || tournament.includes('wta')) {
+        return 'W';
+    }
+    if (tour === 'atp' || tournament.startsWith('m') || tournament.includes('men') || tournament.includes('atp')) {
+        return 'M';
+    }
+    return 'M';
 }
 
 async function collectUpcoming() {
