@@ -10,6 +10,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const LIVE_API_KEY = fs.readFileSync(path.join(__dirname, '..', 'livetennisapi', 'api.key'), 'utf8').trim();
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const BASE_URL = 'https://api.livetennisapi.com/api/public/v1';
 const STATE_FILE = path.join(__dirname, 'state.json');
 const today = new Date().toISOString().split('T')[0];
@@ -161,8 +162,13 @@ async function syncPlayer(player) {
         return null;
     }
 
-    const inserted = await insertRes.json();
-    return inserted.id || inserted[0]?.id || null;
+    let inserted = null;
+    try {
+        inserted = await insertRes.json();
+    } catch (e) {
+        return null;
+    }
+    return inserted?.id || inserted?.[0]?.id || null;
 }
 
 function mapStatus(status) {
@@ -358,24 +364,6 @@ async function collectOdds() {
     console.log(`Odds: matched ${matched}/${oddsData.length}. Requests: ${state.dailyRequests}/100`);
 }
 
-async function triggerPredictions() {
-    if (state.dailyRequests >= 100) return;
-    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming?apikey=${SUPABASE_KEY}`;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-        }
-    });
-    if (res.ok) {
-        console.log('Predictions triggered');
-    } else {
-        console.error('Failed to trigger predictions:', res.status);
-    }
-}
-
 function normalizeTeamName(name) {
     return name
         .toLowerCase()
@@ -454,20 +442,25 @@ async function saveOdds(matchId, player1Name, player2Name, odd1, odd2, commenceT
 }
 
 async function triggerPredictions() {
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+        console.log('No service role key configured, skipping predictions');
+        return;
+    }
     if (state.dailyRequests >= 100) return;
-    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming?apikey=${SUPABASE_KEY}`;
+    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming`;
     const res = await fetch(url, {
         method: 'POST',
         headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'apikey': SUPABASE_SERVICE_ROLE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
             'Content-Type': 'application/json'
         }
     });
     if (res.ok) {
         console.log('Predictions triggered');
     } else {
-        console.error('Failed to trigger predictions:', res.status);
+        const text = await res.text();
+        console.error('Failed to trigger predictions:', res.status, text);
     }
 }
 
@@ -502,3 +495,4 @@ main().catch(err => {
     console.error(err);
     process.exit(1);
 });
+

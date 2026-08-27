@@ -6,7 +6,7 @@ let currentFilter = 'all';
 let cachedData = {};
 let livePollInterval = null;
 let matchesPollInterval = null;
-let settings = { theme: 'dark', oddsFilter: 'all' };
+let settings = { theme: 'dark', oddsFilter: 'all', predictionFilter: 'all' };
 let selectedDate = getLocalYMD(new Date());
 
 function log(msg) {
@@ -78,6 +78,16 @@ async function loadResults() {
         eq: { status: 'completed' }, order: 'scheduled_at.desc', limit: 500
     });
     return (data || []).filter(m => m.score && m.score !== '0-0' && m.scheduled_at && m.scheduled_at.split('T')[0] >= week);
+}
+
+function filterPrediction(matches, filter) {
+    if (filter === 'with-prediction') {
+        return matches.filter(m => m.confidence_score != null);
+    }
+    if (filter === 'without-prediction') {
+        return matches.filter(m => m.confidence_score == null);
+    }
+    return matches;
 }
 
 async function loadAllMatches(date) {
@@ -486,7 +496,8 @@ function renderFiltered() {
     const data = cachedData[currentTab] || [];
     const genderFiltered = filterMatches(data, currentFilter);
     const oddsFiltered = filterOdds(genderFiltered, settings.oddsFilter);
-    renderMatches(oddsFiltered, 'matches-list');
+    const predictionFiltered = filterPrediction(oddsFiltered, settings.predictionFilter);
+    renderMatches(predictionFiltered, 'matches-list');
 }
 
 function showModal(m) {
@@ -1114,6 +1125,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('setting-odds-filter').value = savedOdds;
     }
 
+    const savedPrediction = localStorage.getItem('tp-prediction');
+    if (savedPrediction) {
+        settings.predictionFilter = savedPrediction;
+        const el = document.getElementById('setting-prediction-filter');
+        if (el) el.value = savedPrediction;
+    }
+
     document.querySelectorAll('.tab').forEach(t => {
         t.addEventListener('click', () => {
             log('Tab clicked: ' + t.dataset.tab);
@@ -1189,6 +1207,15 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem('tp-odds', settings.oddsFilter);
         renderFiltered();
     });
+
+    const predictionFilterEl = document.getElementById('setting-prediction-filter');
+    if (predictionFilterEl) {
+        predictionFilterEl.addEventListener('change', e => {
+            settings.predictionFilter = e.target.value;
+            localStorage.setItem('tp-prediction', settings.predictionFilter);
+            renderFiltered();
+        });
+    }
 
     document.querySelector('.modal-close').addEventListener('click', () => {
         document.getElementById('modal').classList.remove('active');
