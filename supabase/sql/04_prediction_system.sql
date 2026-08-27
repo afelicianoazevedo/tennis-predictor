@@ -244,6 +244,7 @@ begin
         WHERE m.status IN ('live', 'upcoming')
           AND m.player1_id IS NOT NULL
           AND m.player2_id IS NOT NULL
+          AND m.category IS DISTINCT FROM 'D'
     LOOP
         PERFORM public.generate_prediction(match_record.id);
         count := count + 1;

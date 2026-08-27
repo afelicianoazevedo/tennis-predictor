@@ -36,7 +36,7 @@ async function api(table, opts = {}) {
 
 const PLAYER_SELECT = 'player1:players!matches_player1_id_fkey(id,name,country,ranking,gender),player2:players!matches_player2_id_fkey(id,name,country,ranking,gender)';
 const TOUR_SELECT = 'tournament:tournaments(name)';
-const NAME_SELECT = 'player1_name,player2_name,tournament_name';
+const NAME_SELECT = 'player1_name,player2_name,tournament_name,category';
 
 async function loadLive() {
     const data = await api('matches', {
@@ -364,12 +364,15 @@ function statusLabel(s) {
 function filterMatches(matches, cat) {
     if (cat === 'all') return matches;
     return matches.filter(m => {
-        const p1 = m.player1?.name || '';
-        const p2 = m.player2?.name || '';
-        const doubles = p1.includes('/') || p2.includes('/');
-        if (cat === 'doubles') return doubles;
-        if (cat === 'men') return !doubles && m.player1?.gender === 'M';
-        if (cat === 'women') return !doubles && m.player1?.gender === 'F';
+        const category = m.category || (() => {
+            const p1 = m.player1?.name || '';
+            const p2 = m.player2?.name || '';
+            if (p1.includes('/') || p2.includes('/')) return 'D';
+            return m.player1?.gender === 'F' ? 'W' : 'M';
+        })();
+        if (cat === 'doubles') return category === 'D';
+        if (cat === 'men') return category === 'M';
+        if (cat === 'women') return category === 'W';
         return true;
     });
 }

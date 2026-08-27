@@ -74,7 +74,8 @@ async function supabaseUpsert(match) {
         player2_name: p2.name || null,
         tournament_name: match.tournament?.name || null,
         player1_id: player1Id,
-        player2_id: player2Id
+        player2_id: player2Id,
+        category: getCategory(p1.name, p2.name, p1.gender, p2.gender)
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
@@ -185,6 +186,14 @@ function formatScore(match) {
         return score.games.map(s => `${s[0]}-${s[1]}`).join(', ');
     }
     return null;
+}
+
+function getCategory(p1Name, p2Name, p1Gender, p2Gender) {
+    if ((p1Name && p1Name.includes('/')) || (p2Name && p2Name.includes('/'))) {
+        return 'D';
+    }
+    const gender = p1Gender || p2Gender || 'M';
+    return gender.toUpperCase() === 'F' ? 'W' : 'M';
 }
 
 async function collectUpcoming() {
