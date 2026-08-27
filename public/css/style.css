@@ -165,6 +165,18 @@ body {
     margin-left: auto;
 }
 
+.match-counter {
+    background: #eab308;
+    color: #0f172a;
+    font-weight: 700;
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    min-width: 24px;
+    text-align: center;
+    line-height: 1;
+}
+
 .date-btn {
     width: 28px;
     height: 28px;

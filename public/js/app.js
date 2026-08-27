@@ -451,6 +451,8 @@ function renderMatches(matches, containerId) {
         log('ERROR: container not found: ' + containerId);
         return;
     }
+    const counter = document.getElementById('match-counter');
+    if (counter) counter.textContent = matches.length;
     if (!matches.length) {
         el.innerHTML = '<div class="empty"><div class="empty-icon">🎾</div><p>Nenhum jogo</p></div>';
         return;
