@@ -18,12 +18,11 @@ on:
           - live
           - results
           - odds
-          - schedule
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -42,6 +41,23 @@ jobs:
         working-directory: collector
         run: npm ci
 
+      - name: Determine mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "MODE=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
+          else
+            MINUTE=$(date -u +%M)
+            HOUR=$(date -u +%H)
+            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
+              echo "MODE=upcoming" >> $GITHUB_OUTPUT
+            elif [ "$MINUTE" == "00" ]; then
+              echo "MODE=live" >> $GITHUB_OUTPUT
+            else
+              echo "MODE=live" >> $GITHUB_OUTPUT
+            fi
+          fi
+
       - name: Run collector
         working-directory: collector
         env:
@@ -50,19 +66,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LIVETENNIS_API_KEY: ${{ secrets.LIVETENNIS_API_KEY }}
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            MODE="${{ github.event.inputs.mode }}"
-          else
-            MINUTE=$(date -u +%M)
-            HOUR=$(date -u +%H)
-            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
-              MODE="upcoming"
-            elif [ "$MINUTE" == "00" ]; then
-              MODE="live"
-            else
-              MODE="schedule"
-            fi
-          fi
-          echo "Running collector in mode: $MODE"
-          node collector.js $MODE
+          echo "Running collector in mode: ${{ steps.mode.outputs.MODE }}"
+          node collector.js ${{ steps.mode.outputs.MODE }}
         continue-on-error: true
