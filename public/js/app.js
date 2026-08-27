@@ -81,11 +81,16 @@ async function loadResults() {
 }
 
 function filterPrediction(matches, filter) {
+    const isDoubles = (m) => {
+        const p1 = m.player1?.name || '';
+        const p2 = m.player2?.name || '';
+        return p1.includes('/') || p2.includes('/');
+    };
     if (filter === 'with-prediction') {
-        return matches.filter(m => m.confidence_score != null);
+        return matches.filter(m => m.confidence_score != null && !isDoubles(m));
     }
     if (filter === 'without-prediction') {
-        return matches.filter(m => m.confidence_score == null);
+        return matches.filter(m => m.confidence_score == null || isDoubles(m));
     }
     return matches;
 }
