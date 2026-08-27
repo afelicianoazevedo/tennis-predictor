@@ -3,11 +3,15 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "start": "node collector.js",
-    "odds": "node odds.js",
-    "cleanup": "node cleanup.js"
+    "start": "node collector.js schedule",
+    "upcoming": "node collector.js upcoming",
+    "live": "node collector.js live",
+    "results": "node collector.js results",
+    "odds": "node collector.js odds",
+    "all": "node collector.js all"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "node-cron": "^4.6.0"
   }
 }

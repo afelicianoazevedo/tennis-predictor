@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -15,15 +16,34 @@ const BASE_URL = 'https://api.livetennisapi.com/api/public/v1';
 const STATE_FILE = path.join(__dirname, 'state.json');
 const today = new Date().toISOString().split('T')[0];
 
-const MODE = process.argv[2] || 'all'; // upcoming | live | finished | odds | all
+const MODE = process.argv[2] || 'schedule'; // upcoming | live | results | odds | schedule | all
 
-let state = { dailyRequests: 0, lastResetDate: today, trackedIds: [] };
+let state = {
+    dailyRequests: 0,
+    lastResetDate: today,
+    trackedIds: [],
+    previousLiveIds: [],
+    lastUpcomingRun: null,
+    lastLiveRun: null,
+    processedMatchIds: {}
+};
 if (fs.existsSync(STATE_FILE)) {
     state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
 }
 if (state.lastResetDate !== today) {
     state.dailyRequests = 0;
     state.lastResetDate = today;
+}
+
+function saveState() {
+    state.processedMatchIds = state.processedMatchIds || {};
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    for (const [id, ts] of Object.entries(state.processedMatchIds)) {
+        if (ts < oneDayAgo) {
+            delete state.processedMatchIds[id];
+        }
+    }
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
 async function liveRequest(endpoint) {
@@ -101,10 +121,10 @@ async function supabaseUpsert(match) {
             },
             body: JSON.stringify(payload)
         });
-        return;
+        return existing[0].id;
     }
 
-    await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
+    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
         method: 'POST',
         headers: {
             'apikey': SUPABASE_KEY,
@@ -113,6 +133,18 @@ async function supabaseUpsert(match) {
         },
         body: JSON.stringify(payload)
     });
+
+    if (!insertRes.ok) {
+        return null;
+    }
+
+    let inserted = null;
+    try {
+        inserted = await insertRes.json();
+    } catch (e) {
+        return null;
+    }
+    return inserted?.id || inserted?.[0]?.id || null;
 }
 
 async function syncPlayer(player) {
@@ -220,7 +252,8 @@ async function collectUpcoming() {
     }
 
     state.trackedIds = [...currentIds];
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    state.lastUpcomingRun = new Date().toISOString();
+    saveState();
     console.log(`Upcoming: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
     await triggerPredictions();
 }
@@ -234,82 +267,92 @@ async function collectLive() {
 
     const data = await liveRequest('/matches?status=live&limit=100');
     const matches = data?.data || [];
-    const currentIds = new Set(state.trackedIds || []);
+    const currentLiveIds = new Set(matches.map(m => m.id));
+    const previousLiveIds = new Set(state.previousLiveIds || []);
+    const finishedIds = [...previousLiveIds].filter(id => !currentLiveIds.has(id));
 
     for (const match of matches) {
-        currentIds.add(match.id);
         await supabaseUpsert(match);
     }
 
-    state.trackedIds = [...currentIds];
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    state.previousLiveIds = [...currentLiveIds];
+    state.lastLiveRun = new Date().toISOString();
+    saveState();
     console.log(`Live: processed ${matches.length}. Requests: ${state.dailyRequests}/100`);
     await triggerPredictions();
+
+    if (finishedIds.length > 0) {
+        console.log(`Detected ${finishedIds.length} matches that left live status. Queued for result verification.`);
+        await collectResults(finishedIds);
+    }
 }
 
-async function collectFinished() {
-    console.log('Mode: finished');
-    const finishedBudget = Math.max(0, 100 - state.dailyRequests);
-    if (finishedBudget < 3) {
-        console.log(`No budget for finished checks (used ${state.dailyRequests}/100).`);
+async function collectResults(candidateIds) {
+    console.log('Mode: results');
+    const resultsBudget = Math.max(0, 100 - state.dailyRequests);
+    if (resultsBudget < 1) {
+        console.log(`No budget for results (used ${state.dailyRequests}/100).`);
         return;
     }
 
-    const oddsUrl = `${SUPABASE_URL}/rest/v1/odds?select=match_id&order=captured_at.desc&limit=1000&apikey=${SUPABASE_KEY}`;
-    const oddsRes = await fetch(oddsUrl, {
+    const unprocessed = candidateIds.filter(id => !isProcessed(id));
+    if (unprocessed.length === 0) {
+        console.log('Results: all candidates already processed.');
+        return;
+    }
+
+    const supabaseIds = unprocessed.slice(0, 200).join(',');
+    const matchesUrl = `${SUPABASE_URL}/rest/v1/matches?id=in.(${supabaseIds})&select=id,category,confidence_score,predicted_winner_id,player1_name,player2_name&apikey=${SUPABASE_KEY}`;
+    const matchesRes = await fetch(matchesUrl, {
         headers: {
             'apikey': SUPABASE_KEY,
             'Authorization': `Bearer ${SUPABASE_KEY}`
         }
     });
 
-    if (!oddsRes.ok) {
-        console.error(`Error fetching odds: ${oddsRes.status}`);
+    if (!matchesRes.ok) {
+        console.error(`Error fetching match metadata: ${matchesRes.status}`);
         return;
     }
 
-    const odds = await oddsRes.json();
-    const oddsMatchIds = new Set(odds.map(o => o.match_id).filter(Boolean));
+    const matchMeta = await matchesRes.json();
+    const metaMap = new Map(matchMeta.map(m => [m.id, m]));
 
-    if (oddsMatchIds.size === 0) {
-        console.log('No odds found. Skipping finished checks.');
-        return;
-    }
+    const sorted = unprocessed
+        .map(id => metaMap.get(id) || { id, category: 'M', confidence_score: 0, predicted_winner_id: null })
+        .sort((a, b) => {
+            const aHasPred = a.predicted_winner_id ? 1 : 0;
+            const bHasPred = b.predicted_winner_id ? 1 : 0;
+            const aPriority = (a.category === 'M' || a.category === 'W') ? aHasPred : -1;
+            const bPriority = (b.category === 'M' || b.category === 'W') ? bHasPred : -1;
+            if (bPriority !== aPriority) return bPriority - aPriority;
+            return (b.confidence_score || 0) - (a.confidence_score || 0);
+        });
 
-    const previousIds = new Set(state.trackedIds || []);
-    const finishedIds = [...previousIds].filter(id => oddsMatchIds.has(id));
+    const toCheck = sorted.slice(0, Math.min(sorted.length, resultsBudget));
+    console.log(`Results: verifying ${toCheck.length}/${unprocessed.length} matches (budget ${resultsBudget})...`);
 
-    if (finishedIds.length === 0) {
-        console.log('No finished matches with odds to check.');
-        return;
-    }
-
-    const MAX_FINISHED_PER_RUN = 20;
-    const toCheck = finishedIds.slice(0, Math.min(finishedIds.length, MAX_FINISHED_PER_RUN, finishedBudget - 2));
-    console.log(`Checking ${toCheck.length}/${finishedIds.length} finished matches with odds (budget ${finishedBudget})...`);
-
-    for (const id of toCheck) {
+    let verified = 0;
+    for (const m of toCheck) {
         if (state.dailyRequests >= 100) break;
-        const detail = await liveRequest(`/matches/${id}`);
+        const detail = await liveRequest(`/matches/${m.id}`);
         if (detail?.data) {
-            await supabaseUpsert(detail.data);
+            const matchStatus = mapStatus(detail.data.status);
+            if (matchStatus === 'completed') {
+                await supabaseUpsert(detail.data);
+                markProcessed(m.id);
+                verified++;
+            }
         }
     }
 
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-    console.log(`Finished: processed ${toCheck.length}. Requests: ${state.dailyRequests}/100`);
-    await triggerPredictions();
+    console.log(`Results: verified ${verified} completed matches. Requests: ${state.dailyRequests}/100`);
 }
 
 async function collectOdds() {
     console.log('Mode: odds');
     const ODDS_API_KEY = 'cd537e87d7f2a362b3d6b3a9c57d9f5b';
     const ODDS_API_BASE = 'https://api.the-odds-api.com/v4';
-
-    if (state.dailyRequests >= 95) {
-        console.log(`No budget for odds (used ${state.dailyRequests}/100).`);
-        return;
-    }
 
     const url = `${ODDS_API_BASE}/sports/tennis/odds/?regions=eu&markets=h2h&oddsFormat=decimal&apiKey=${ODDS_API_KEY}`;
     const res = await fetch(url, {
@@ -415,7 +458,7 @@ async function collectOdds() {
         }
     }
 
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    saveState();
     console.log(`Odds: matched ${matched}/${oddsData.length}. Requests: ${state.dailyRequests}/100`);
 }
 
@@ -519,11 +562,67 @@ async function triggerPredictions() {
     }
 }
 
+function isProcessed(matchId) {
+    if (!state.processedMatchIds) return false;
+    const processedAt = state.processedMatchIds[matchId];
+    if (!processedAt) return false;
+    const processedDate = new Date(processedAt).toISOString().split('T')[0];
+    return processedDate === today;
+}
+
+function markProcessed(matchId) {
+    state.processedMatchIds = state.processedMatchIds || {};
+    state.processedMatchIds[matchId] = new Date().toISOString();
+    saveState();
+}
+
+async function runSchedule() {
+    console.log('Starting collector scheduler...');
+
+    const isAlreadyRun = (lastRun) => {
+        if (!lastRun) return false;
+        const lastDate = new Date(lastRun).toISOString().split('T')[0];
+        return lastDate === today;
+    };
+
+    cron.schedule('0 0 * * *', async () => {
+        if (isAlreadyRun(state.lastUpcomingRun)) return;
+        console.log('[Scheduler] Running upcoming collection (00:00)...');
+        state.dailyRequests = 0;
+        state.lastResetDate = today;
+        await collectUpcoming();
+    });
+
+    cron.schedule('0 12 * * *', async () => {
+        if (isAlreadyRun(state.lastUpcomingRun)) return;
+        console.log('[Scheduler] Running upcoming collection (12:00)...');
+        state.dailyRequests = 0;
+        state.lastResetDate = today;
+        await collectUpcoming();
+    });
+
+    cron.schedule('0 * * * *', async () => {
+        if (isAlreadyRun(state.lastLiveRun)) return;
+        console.log('[Scheduler] Running live collection...');
+        state.dailyRequests = 0;
+        state.lastResetDate = today;
+        await collectLive();
+    });
+
+    console.log('Scheduler active. Upcoming: 00:00 & 12:00 | Live: every hour');
+}
+
 async function main() {
-    if (MODE === 'all') {
+    if (MODE === 'schedule') {
+        await runSchedule();
+        process.on('SIGINT', () => {
+            console.log('Shutting down scheduler...');
+            process.exit(0);
+        });
+        await new Promise(() => {});
+    } else if (MODE === 'all') {
         await collectUpcoming();
         await collectLive();
-        await collectFinished();
         await collectOdds();
     } else {
         switch (MODE) {
@@ -533,14 +632,14 @@ async function main() {
             case 'live':
                 await collectLive();
                 break;
-            case 'finished':
-                await collectFinished();
+            case 'results':
+                await collectResults([...new Set(state.trackedIds)].filter(id => !isProcessed(id)));
                 break;
             case 'odds':
                 await collectOdds();
                 break;
             default:
-                console.error(`Unknown mode: ${MODE}. Use upcoming, live, finished, odds, or all.`);
+                console.error(`Unknown mode: ${MODE}. Use upcoming, live, results, odds, schedule, or all.`);
                 process.exit(1);
         }
     }
@@ -550,4 +649,3 @@ main().catch(err => {
     console.error(err);
     process.exit(1);
 });
-

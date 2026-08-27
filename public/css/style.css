@@ -860,17 +860,22 @@ body {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    background: var(--c-uncertain);
-    color: white;
     padding: 10px 20px;
     border-radius: var(--radius);
     font-size: 0.8rem;
     z-index: 400;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
 
 .toast.active {
     display: block;
 }
+
+.toast.success { background: #22c55e; color: white; }
+.toast.error { background: #ef4444; color: white; }
+.toast.warning { background: #eab308; color: #0f172a; }
+.toast.info { background: #3b82f6; color: white; }
 
 /* Empty State */
 .empty {

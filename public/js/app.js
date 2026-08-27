@@ -1014,12 +1014,57 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds) {
     `;
 }
 
-function toast(msg) {
+let previousMatchStatuses = {};
+let lastNotificationTime = 0;
+
+function toast(msg, type = 'info') {
     const t = document.getElementById('toast');
     if (t) {
         t.textContent = msg;
+        t.className = 'toast ' + type;
         t.classList.add('active');
-        setTimeout(() => t.classList.remove('active'), 4000);
+        clearTimeout(toast._timeout);
+        toast._timeout = setTimeout(() => t.classList.remove('active'), 4000);
+    }
+}
+
+function detectStatusChanges(matches) {
+    const now = Date.now();
+    if (now - lastNotificationTime < 5000) return;
+    
+    let finishedCount = 0;
+    let newUpcomingCount = 0;
+    const finishedMatches = [];
+    
+    for (const m of matches) {
+        const prev = previousMatchStatuses[m.id];
+        if (!prev) {
+            if (m.status === 'upcoming') newUpcomingCount++;
+            previousMatchStatuses[m.id] = m.status;
+            continue;
+        }
+        
+        if (prev === 'live' && m.status === 'completed') {
+            finishedCount++;
+            finishedMatches.push(m);
+        }
+        previousMatchStatuses[m.id] = m.status;
+    }
+    
+    if (finishedCount > 0) {
+        lastNotificationTime = now;
+        const p1 = finishedMatches[0].player1?.name || finishedMatches[0].player1_name || 'Jogador 1';
+        const p2 = finishedMatches[0].player2?.name || finishedMatches[0].player2_name || 'Jogador 2';
+        if (finishedCount === 1) {
+            toast(`Jogo terminado: ${p1} vs ${p2}`, 'success');
+        } else {
+            toast(`${finishedCount} jogos terminados`, 'success');
+        }
+    }
+    
+    if (newUpcomingCount > 0 && currentTab === 'matches') {
+        lastNotificationTime = now;
+        toast(`${newUpcomingCount} novos jogos upcoming`, 'info');
     }
 }
 
@@ -1059,6 +1104,7 @@ async function switchTab(tab) {
         loader(true);
         try {
             cachedData[tab] = await loadLive();
+            detectStatusChanges(cachedData[tab]);
             log('Loaded ' + (cachedData[tab]?.length || 0) + ' live matches');
         } catch (e) {
             log('ERROR loading live: ' + e.message);
@@ -1073,6 +1119,7 @@ async function switchTab(tab) {
             try {
                 const data = await loadLive();
                 cachedData['live'] = data;
+                detectStatusChanges(data);
                 if (currentTab === 'live') {
                     renderFiltered();
                 }
@@ -1090,6 +1137,7 @@ async function switchTab(tab) {
         loader(true);
         try {
             cachedData[tab] = await loadAllMatches(selectedDate);
+            detectStatusChanges(cachedData[tab]);
             log('Loaded ' + (cachedData[tab]?.length || 0) + ' matches for ' + selectedDate);
         } catch (e) {
             log('ERROR loading matches: ' + e.message);
@@ -1104,6 +1152,7 @@ async function switchTab(tab) {
             try {
                 const data = await loadAllMatches(selectedDate);
                 cachedData['matches'] = data;
+                detectStatusChanges(data);
                 if (currentTab === 'matches') {
                     renderFiltered();
                 }
