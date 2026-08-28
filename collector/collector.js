@@ -316,7 +316,7 @@ async function collectResults(candidateIds) {
     }
 
     const supabaseIds = unprocessed.slice(0, 200).join(',');
-    const matchesUrl = `${SUPABASE_URL}/rest/v1/matches?id=in.(${supabaseIds})&select=id,category,confidence_score,predicted_winner_id,player1_name,player2_name&apikey=${SUPABASE_KEY}`;
+    const matchesUrl = `${SUPABASE_URL}/rest/v1/matches?id=in.(${supabaseIds})&select=id,category,confidence_score,predicted_winner_id,player1_name,player2_name,scheduled_at&apikey=${SUPABASE_KEY}`;
     const matchesRes = await fetch(matchesUrl, {
         headers: {
             'apikey': SUPABASE_KEY,
@@ -330,10 +330,15 @@ async function collectResults(candidateIds) {
     }
 
     const matchMeta = await matchesRes.json();
+    const todayStr = new Date().toISOString().split('T')[0];
     const metaMap = new Map(matchMeta.map(m => [m.id, m]));
 
-    const sorted = unprocessed
-        .map(id => metaMap.get(id) || { id, category: 'M', confidence_score: 0, predicted_winner_id: null })
+    const todaysMatches = matchMeta.filter(m => {
+        const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+        return matchDate === todayStr;
+    });
+
+    const sorted = todaysMatches
         .sort((a, b) => {
             const aHasPred = a.predicted_winner_id ? 1 : 0;
             const bHasPred = b.predicted_winner_id ? 1 : 0;
@@ -344,17 +349,19 @@ async function collectResults(candidateIds) {
         });
 
     const toCheck = sorted.slice(0, Math.min(sorted.length, resultsBudget));
+    const withPrediction = toCheck.filter(m => m.predicted_winner_id);
+    const finalToCheck = withPrediction.length > 0 ? withPrediction : toCheck;
     if (state.singleTestMatchId) {
-        const singleIndex = toCheck.findIndex(m => String(m.id) === String(state.singleTestMatchId));
+        const singleIndex = sorted.findIndex(m => String(m.id) === String(state.singleTestMatchId));
         if (singleIndex >= 0) {
-            toCheck.length = 0;
-            toCheck.push(sorted[singleIndex]);
+            finalToCheck.length = 0;
+            finalToCheck.push(sorted[singleIndex]);
         }
     }
-    console.log(`Results: verifying ${toCheck.length}/${unprocessed.length} matches (budget ${resultsBudget})...`);
+    console.log(`Results: verifying ${finalToCheck.length}/${todaysMatches.length} matches (budget ${resultsBudget})...`);
 
     let verified = 0;
-    for (const m of toCheck) {
+    for (const m of finalToCheck) {
         if (state.dailyRequests >= 100) break;
         const detail = await liveRequest(`/matches/${m.id}`);
         if (detail?.data) {
