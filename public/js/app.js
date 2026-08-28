@@ -116,7 +116,7 @@ async function loadAllMatches(date) {
         eq: { status: 'live' }, order: 'scheduled_at.asc', limit: 500
     });
 
-    const all = [...(upcoming || []), ...(live || []), ...(completed || [])];
+    const all = [...(upcoming || []), ...(live || [])];
     log(`loadAllMatches(${d}): upcoming=${upcoming?.length || 0}, completed=${completed?.length || 0}, live=${live?.length || 0}, total=${all.length}`);
 
     return all.filter(m => {
