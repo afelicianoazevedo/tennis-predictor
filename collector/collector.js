@@ -54,7 +54,10 @@ async function liveRequest(endpoint, retries = 3) {
     }
     const url = `${BASE_URL}${endpoint}`;
     const res = await fetch(url, {
-        headers: { 'X-API-Key': LIVE_API_KEY }
+        headers: {
+            'X-API-Key': LIVE_API_KEY,
+            'User-Agent': 'Mozilla/5.0 (compatible; TennisCollector/1.0)'
+        }
     });
     
     if (res.status === 429) {
@@ -335,33 +338,24 @@ async function collectResults(candidateIds) {
 
     const todaysMatches = matchMeta.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
-        return matchDate === todayStr;
+        return matchDate === todayStr && m.category !== 'D';
     });
 
-    const sorted = todaysMatches
-        .sort((a, b) => {
-            const aHasPred = a.predicted_winner_id ? 1 : 0;
-            const bHasPred = b.predicted_winner_id ? 1 : 0;
-            const aPriority = (a.category === 'M' || a.category === 'W') ? aHasPred : -1;
-            const bPriority = (b.category === 'M' || b.category === 'W') ? bHasPred : -1;
-            if (bPriority !== aPriority) return bPriority - aPriority;
-            return (b.confidence_score || 0) - (a.confidence_score || 0);
-        });
+    const withPrediction = todaysMatches.filter(m => m.predicted_winner_id);
+    const sorted = withPrediction.sort((a, b) => (b.confidence_score || 0) - (a.confidence_score || 0));
 
     const toCheck = sorted.slice(0, Math.min(sorted.length, resultsBudget));
-    const withPrediction = toCheck.filter(m => m.predicted_winner_id);
-    const finalToCheck = withPrediction.length > 0 ? withPrediction : toCheck;
     if (state.singleTestMatchId) {
-        const singleIndex = sorted.findIndex(m => String(m.id) === String(state.singleTestMatchId));
+        const singleIndex = toCheck.findIndex(m => String(m.id) === String(state.singleTestMatchId));
         if (singleIndex >= 0) {
-            finalToCheck.length = 0;
-            finalToCheck.push(sorted[singleIndex]);
+            toCheck.length = 0;
+            toCheck.push(sorted[singleIndex]);
         }
     }
-    console.log(`Results: verifying ${finalToCheck.length}/${todaysMatches.length} matches (budget ${resultsBudget})...`);
+    console.log(`Results: verifying ${toCheck.length}/${withPrediction.length} matches (budget ${resultsBudget})...`);
 
     let verified = 0;
-    for (const m of finalToCheck) {
+    for (const m of toCheck) {
         if (state.dailyRequests >= 100) break;
         const detail = await liveRequest(`/matches/${m.id}`);
         if (detail?.data) {
