@@ -1162,21 +1162,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('date-prev').addEventListener('click', () => changeDate(-1));
     document.getElementById('date-next').addEventListener('click', () => changeDate(1));
-    document.getElementById('date-refresh').addEventListener('click', async () => {
-        if (currentTab === 'matches') {
-            loader(true);
-            try {
-                cachedData[currentTab] = await loadAllMatches(selectedDate);
-                log('Refreshed matches for ' + selectedDate);
-            } catch (e) {
-                log('ERROR refreshing matches: ' + e.message);
-                toast('Erro: ' + e.message);
-            } finally {
-                loader(false);
-            }
-            renderFiltered();
-        }
-    });
 
     const dateInput = document.getElementById('date-input');
     if (dateInput) {
