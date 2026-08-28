@@ -28,6 +28,7 @@ jobs:
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       LIVETENNIS_API_KEY: ${{ secrets.LIVETENNIS_API_KEY }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,23 +42,6 @@ jobs:
         working-directory: collector
         run: npm ci
 
-      - name: Determine mode
-        id: mode
-        run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "MODE=${{ github.event.inputs.mode }}" >> $GITHUB_OUTPUT
-          else
-            MINUTE=$(date -u +%M)
-            HOUR=$(date -u +%H)
-            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
-              echo "MODE=upcoming" >> $GITHUB_OUTPUT
-            elif [ "$MINUTE" == "00" ]; then
-              echo "MODE=live" >> $GITHUB_OUTPUT
-            else
-              echo "MODE=live" >> $GITHUB_OUTPUT
-            fi
-          fi
-
       - name: Run collector
         working-directory: collector
         env:
@@ -66,6 +50,41 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           LIVETENNIS_API_KEY: ${{ secrets.LIVETENNIS_API_KEY }}
         run: |
-          echo "Running collector in mode: ${{ steps.mode.outputs.MODE }}"
-          node collector.js ${{ steps.mode.outputs.MODE }}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            MODE="${{ github.event.inputs.mode }}"
+          else
+            MINUTE=$(date -u +%M)
+            HOUR=$(date -u +%H)
+            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
+              MODE="all"
+            elif [ "$MINUTE" == "00" ]; then
+              MODE="live"
+            else
+              MODE="all"
+            fi
+          fi
+          echo "Running collector in mode: $MODE"
+          node collector.js $MODE
         continue-on-error: true
+
+      - name: Commit state changes
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add collector/state.json
+          git diff --cached --quiet && echo "No state changes to commit" && exit 0
+          git commit -m "chore: update collector state [skip ci]"
+          git push
+
+      - name: Commit state changes
+        if: always()
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add collector/state.json
+          git diff --cached --quiet && echo "No state changes to commit" && exit 0
+          git commit -m "chore: update collector state [skip ci]"
+          git push
