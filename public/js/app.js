@@ -315,7 +315,7 @@ function parseDateEU(str) {
 
 function syncDateInput() {
     const input = document.getElementById('date-input');
-    if (input) input.value = formatDateEU(selectedDate);
+    if (input) input.value = selectedDate;
 }
 
 async function applyDate(newDate) {
@@ -1184,29 +1184,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const dateInput = document.getElementById('date-input');
     if (dateInput) {
-        dateInput.addEventListener('input', e => {
-            let value = e.target.value.replace(/[^\d]/g, '');
-            if (value.length > 8) value = value.slice(0, 8);
-            const parts = [];
-            for (let i = 0; i < value.length && i < 8; i++) {
-                if (i === 2 || i === 4) parts.push('/');
-                parts.push(value[i]);
-            }
-            e.target.value = parts.join('');
-        });
-
         dateInput.addEventListener('change', e => {
-            const parsed = parseDateEU(e.target.value);
-            if (parsed) applyDate(parsed);
-        });
-        dateInput.addEventListener('blur', e => {
-            const parsed = parseDateEU(e.target.value);
-            if (parsed && parsed !== selectedDate) applyDate(parsed);
-        });
-        dateInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                const parsed = parseDateEU(e.target.value);
-                if (parsed) applyDate(parsed);
+            const value = e.target.value;
+            if (!value) return;
+            const [y, m, d] = value.split('-').map(Number);
+            if (y && m && d) {
+                const date = new Date(y, m - 1, d);
+                applyDate(getLocalYMD(date));
             }
         });
     }
