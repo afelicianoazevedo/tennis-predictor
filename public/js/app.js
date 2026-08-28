@@ -7,6 +7,10 @@ let cachedData = {};
 let matchesPollInterval = null;
 let settings = { theme: 'dark', oddsFilter: 'all', predictionFilter: 'all' };
 let selectedDate = getLocalYMD(new Date());
+let resultsFilter = 'all';
+let resultsDate = getLocalYMD(new Date());
+let resultsData = {};
+let resultsPollInterval = null;
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -120,6 +124,18 @@ async function loadAllMatches(date) {
         if (matchDate !== d) return false;
         if (m.status !== 'completed' && m.confidence_score === 50) return false;
         return true;
+    });
+}
+
+async function loadResults(date) {
+    const d = date || resultsDate;
+    const data = await api('matches', {
+        select: `id,scheduled_at,status,round,surface,score,sets,winner_id,confidence_score,confidence_level,predicted_winner_id,player1_probability,player2_probability,${PLAYER_SELECT},${TOUR_SELECT},${NAME_SELECT}`,
+        eq: { status: 'completed' }, order: 'scheduled_at.desc', limit: 500
+    });
+    return (data || []).filter(m => {
+        const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
+        return matchDate === d;
     });
 }
 
@@ -346,6 +362,47 @@ async function applyDate(newDate) {
 async function changeDate(delta) {
     const newDate = addDays(selectedDate, delta);
     await applyDate(newDate);
+}
+
+async function changeResultsDate(delta) {
+    const newDate = addDays(resultsDate, delta);
+    await applyResultsDate(newDate);
+}
+
+function syncResultsDateInput() {
+    const input = document.getElementById('results-date-input');
+    if (input) input.value = resultsDate;
+}
+
+async function applyResultsDate(newDate) {
+    const parsed = typeof newDate === 'string' && newDate.includes('/') ? parseDateEU(newDate) : newDate;
+    if (!parsed) {
+        log('Invalid date format: ' + newDate);
+        return;
+    }
+    resultsDate = parsed;
+    syncResultsDateInput();
+    log('Results date changed to: ' + resultsDate);
+    
+    if (currentTab === 'results') {
+        loader(true);
+        try {
+            resultsData['results'] = await loadResults(resultsDate);
+            log('Loaded ' + (resultsData['results']?.length || 0) + ' results for ' + resultsDate);
+        } catch (e) {
+            log('ERROR loading results: ' + e.message);
+            toast('Erro: ' + e.message);
+        } finally {
+            loader(false);
+        }
+        renderResultsFiltered();
+    }
+}
+
+function renderResultsFiltered() {
+    const data = resultsData['results'] || [];
+    const genderFiltered = filterMatches(data, resultsFilter);
+    renderMatches(genderFiltered, 'results-list');
 }
 
 function statusLabel(s) {
@@ -1072,6 +1129,11 @@ async function switchTab(tab) {
         matchesPollInterval = null;
     }
 
+    if (resultsPollInterval) {
+        clearInterval(resultsPollInterval);
+        resultsPollInterval = null;
+    }
+
     if (tab === 'stats') {
         loader(true);
         try {
@@ -1114,6 +1176,36 @@ async function switchTab(tab) {
                 }
             } catch (e) {
                 log('Matches poll error: ' + e.message);
+            }
+        }, 30000);
+        return;
+    }
+
+    if (tab === 'results') {
+        syncResultsDateInput();
+        log('Loading results for date: ' + resultsDate);
+        loader(true);
+        try {
+            resultsData[tab] = await loadResults(resultsDate);
+            log('Loaded ' + (resultsData[tab]?.length || 0) + ' results for ' + resultsDate);
+        } catch (e) {
+            log('ERROR loading results: ' + e.message);
+            toast('Erro: ' + e.message);
+        } finally {
+            loader(false);
+        }
+        renderResultsFiltered();
+
+        resultsPollInterval = setInterval(async () => {
+            log('Polling results for date ' + resultsDate + '...');
+            try {
+                const data = await loadResults(resultsDate);
+                resultsData['results'] = data;
+                if (currentTab === 'results') {
+                    renderResultsFiltered();
+                }
+            } catch (e) {
+                log('Results poll error: ' + e.message);
             }
         }, 30000);
         return;
@@ -1172,6 +1264,28 @@ document.addEventListener('DOMContentLoaded', () => {
             if (y && m && d) {
                 const date = new Date(y, m - 1, d);
                 applyDate(getLocalYMD(date));
+            }
+        });
+    }
+
+    document.getElementById('results-filter-select').addEventListener('change', e => {
+        log('Results filter changed: ' + e.target.value);
+        resultsFilter = e.target.value;
+        renderResultsFiltered();
+    });
+
+    document.getElementById('results-date-prev').addEventListener('click', () => changeResultsDate(-1));
+    document.getElementById('results-date-next').addEventListener('click', () => changeResultsDate(1));
+
+    const resultsDateInput = document.getElementById('results-date-input');
+    if (resultsDateInput) {
+        resultsDateInput.addEventListener('change', e => {
+            const value = e.target.value;
+            if (!value) return;
+            const [y, m, d] = value.split('-').map(Number);
+            if (y && m && d) {
+                const date = new Date(y, m - 1, d);
+                applyResultsDate(getLocalYMD(date));
             }
         });
     }

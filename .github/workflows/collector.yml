@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 0 * * *'
     - cron: '0 12 * * *'
+    - cron: '0 18 * * *'
     - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
@@ -14,7 +15,6 @@ on:
         type: choice
         options:
           - all
-          - upcoming
           - live
           - results
           - odds
@@ -55,7 +55,7 @@ jobs:
           else
             MINUTE=$(date -u +%M)
             HOUR=$(date -u +%H)
-            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ]; }; then
+            if [ "$MINUTE" == "00" ] && { [ "$HOUR" == "00" ] || [ "$HOUR" == "12" ] || [ "$HOUR" == "18" ]; }; then
               MODE="all"
             elif [ "$MINUTE" == "00" ]; then
               MODE="live"
