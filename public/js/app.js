@@ -1154,14 +1154,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.querySelectorAll('.filter').forEach(f => {
-        f.addEventListener('click', () => {
-            log('Filter clicked: ' + f.dataset.filter);
-            document.querySelectorAll('.filter').forEach(x => x.classList.remove('active'));
-            f.classList.add('active');
-            currentFilter = f.dataset.filter;
-            renderFiltered();
-        });
+    document.getElementById('filter-select').addEventListener('change', e => {
+        log('Filter changed: ' + e.target.value);
+        currentFilter = e.target.value;
+        renderFiltered();
     });
 
     document.getElementById('date-prev').addEventListener('click', () => changeDate(-1));

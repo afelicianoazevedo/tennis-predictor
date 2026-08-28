@@ -129,20 +129,15 @@ body {
 .filters {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 12px 16px;
+    gap: 8px;
+    padding: 10px 12px;
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
-    overflow-x: auto;
+    flex-wrap: wrap;
 }
 
-.filter-group {
-    display: flex;
-    gap: 6px;
-}
-
-.filter {
-    padding: 6px 14px;
+.filter-select {
+    padding: 6px 10px;
     border-radius: 20px;
     border: 1px solid var(--border);
     background: transparent;
@@ -151,17 +146,23 @@ body {
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.2s;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding-right: 28px;
+    min-width: 100px;
 }
 
-.filter.active {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-}
-
-.filter:hover {
-    border-color: var(--accent);
+.filter-select option {
+    background: var(--bg-card);
     color: var(--text);
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--accent);
 }
 
 .match-counter {
@@ -182,7 +183,6 @@ body {
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-left: auto;
 }
 
 .date-btn {
