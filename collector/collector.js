@@ -358,10 +358,10 @@ async function collectResults(candidateIds) {
     for (const m of toCheck) {
         if (state.dailyRequests >= 100) break;
         const detail = await liveRequest(`/matches/${m.id}`);
-        if (detail?.data) {
-            const matchStatus = mapStatus(detail.data.status);
+        if (detail?.status) {
+            const matchStatus = mapStatus(detail.status);
             if (matchStatus === 'completed') {
-                await supabaseUpsert(detail.data);
+                await supabaseUpsert(detail);
                 markProcessed(m.id);
                 verified++;
             }
@@ -478,6 +478,8 @@ async function collectOdds() {
         if (bestMatchId) {
             await saveOdds(bestMatchId, p1Name, p2Name, p1Odd.price, p2Odd.price, commenceTime);
             matched++;
+        } else {
+            await saveRawOdds(event.id, event.sport_key, p1Name, p2Name, p1Odd.price, p2Odd.price, commenceTime);
         }
     }
 
@@ -559,6 +561,36 @@ async function saveOdds(matchId, player1Name, player2Name, odd1, odd2, commenceT
 
     if (!res.ok) {
         console.error(`Failed to save odds for match ${matchId}: ${res.status} ${await res.text()}`);
+    }
+}
+
+async function saveRawOdds(eventId, sportKey, homeTeam, awayTeam, homeOdd, awayOdd, commenceTime) {
+    const payload = {
+        event_id: eventId,
+        sport_key: sportKey,
+        home_team: homeTeam,
+        away_team: awayTeam,
+        player1_odd: homeOdd,
+        player2_odd: awayOdd,
+        source: 'the_odds_api',
+        market: 'match_winner',
+        commence_time: commenceTime,
+        matched: false
+    };
+
+    const url = `${SUPABASE_URL}/rest/v1/odds_raw`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'apikey': SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+        console.error(`Failed to save raw odds for event ${eventId}: ${res.status} ${await res.text()}`);
     }
 }
 
