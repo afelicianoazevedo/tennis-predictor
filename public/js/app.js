@@ -199,14 +199,16 @@ async function loadStats(period = 'all') {
 
     const predictions = await api('match_predictions', {
         select: 'id,was_correct,created_at,confidence_score',
+        order: 'created_at.desc',
         ...(start ? { gte: { created_at: start } } : {}),
-        ...(end ? { lt: { created_at: end } } : {})
+        ...(end ? { lte: { created_at: end } } : {})
     });
 
     const matches = await api('matches', {
         select: 'id,status,scheduled_at',
+        order: 'scheduled_at.desc',
         ...(start ? { gte: { scheduled_at: start } } : {}),
-        ...(end ? { lt: { scheduled_at: end } } : {})
+        ...(end ? { lte: { scheduled_at: end } } : {})
     });
 
     const today = now.toISOString().split('T')[0];
@@ -484,6 +486,8 @@ function renderMatch(m) {
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
     const p1Display = p1Prob != null ? p1Prob.toFixed(1) : null;
     const p2Display = p2Prob != null ? p2Prob.toFixed(1) : null;
+    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${p1Display}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${p2Display}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
     const setCount = getSetCount(m);
     const p1ResultBadge = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
     const p2ResultBadge = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
