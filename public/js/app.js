@@ -204,6 +204,12 @@ async function loadStats(period = 'all') {
         ...(end ? { lte: { created_at: end } } : {})
     });
 
+    const allPredictions = await api('match_predictions', {
+        select: 'id,was_correct,confidence_score',
+        order: 'created_at.desc',
+        limit: 1000
+    });
+
     const matches = await api('matches', {
         select: 'id,status,scheduled_at',
         order: 'scheduled_at.desc',
@@ -221,6 +227,12 @@ async function loadStats(period = 'all') {
     const wrong = predictions.filter(p => p.was_correct === false).length;
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
     const wrongPct = withPredictions > 0 ? Math.round((wrong / withPredictions) * 100) : 0;
+
+    const overallCorrect = allPredictions.filter(p => p.was_correct === true).length;
+    const overallWrong = allPredictions.filter(p => p.was_correct === false).length;
+    const overallTotal = allPredictions.filter(p => p.was_correct != null).length;
+    const overallAccuracy = overallTotal > 0 ? Math.round((overallCorrect / overallTotal) * 100) : 0;
+    const overallWrongPct = overallTotal > 0 ? Math.round((overallWrong / overallTotal) * 100) : 0;
 
     const trendStats = {
         incerto: { total: 0, correct: 0, wrong: 0 },
@@ -240,7 +252,7 @@ async function loadStats(period = 'all') {
         if (p.was_correct === false) trendStats[level].wrong++;
     });
 
-    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length, trendStats };
+    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length, trendStats, overall: { total: overallTotal, correct: overallCorrect, wrong: overallWrong, accuracy: overallAccuracy, wrongPct: overallWrongPct } };
 }
 
 function time(d) {
@@ -265,14 +277,10 @@ function getSetCount(m) {
     if (!m.sets) return null;
     try {
         const sets = Array.isArray(m.sets) ? m.sets : JSON.parse(m.sets);
-        if (!Array.isArray(sets)) return null;
-        let p1Sets = 0, p2Sets = 0;
-        for (const s of sets) {
-            if (Array.isArray(s) && s.length >= 2) {
-                if (s[0] > s[1]) p1Sets++;
-                else if (s[1] > s[0]) p2Sets++;
-            }
-        }
+        if (!Array.isArray(sets) || sets.length < 2) return null;
+        const p1Sets = sets[0];
+        const p2Sets = sets[1];
+        if (typeof p1Sets !== 'number' || typeof p2Sets !== 'number') return null;
         return `${p1Sets}-${p2Sets}`;
     } catch (e) {
         return null;
@@ -283,8 +291,15 @@ function parseSets(m) {
     if (!m.sets) return [];
     try {
         const raw = Array.isArray(m.sets) ? m.sets : JSON.parse(m.sets);
-        if (!Array.isArray(raw)) return [];
-        return raw.filter(s => Array.isArray(s) && s.length >= 2);
+        if (!Array.isArray(raw) || raw.length < 2) return [];
+        const p1Sets = raw[0];
+        const p2Sets = raw[1];
+        if (typeof p1Sets !== 'number' || typeof p2Sets !== 'number') return [];
+        const sets = [];
+        for (let i = 0; i < p1Sets + p2Sets; i++) {
+            sets.push([0, 0]);
+        }
+        return sets;
     } catch (e) {
         return [];
     }
@@ -622,13 +637,8 @@ function showModal(m) {
     const wasCorrect = m.status === 'completed' && predId && m.winner_id ? (predId === m.winner_id) : null;
     const showResult = m.status === 'completed' && m.score;
 
-    const setsList = m.status === 'completed' ? parseSets(m) : [];
-    const setsHtml = setsList.length > 0 ? setsList.map(s => {
-        const p1Set = s[0], p2Set = s[1];
-        const p1Bold = p1Set > p2Set ? 'font-weight:bold;' : '';
-        const p2Bold = p2Set > p1Set ? 'font-weight:bold;' : '';
-        return `<div style="font-size:0.9rem;margin:2px 0"><span style="${p1Bold}">${p1Set}</span>-<span style="${p2Bold}">${p2Set}</span></div>`;
-    }).join('') : (m.status === 'completed' ? '<div style="font-size:0.8rem;color:var(--text-dim)">Sets não disponíveis</div>' : '');
+    const setCount = getSetCount(m);
+    const setsInfo = m.status === 'completed' && setCount ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:4px">Sets: ${setCount}</div>` : '';
 
     document.getElementById('modal-content').innerHTML = `
         <h3>${m.tournament_name || tour.name || 'Jogo'}</h3>
@@ -643,7 +653,7 @@ function showModal(m) {
             </div>
             <div style="text-align:center">
                 <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
-                ${setsHtml}
+                ${setsInfo}
             </div>
             <div style="text-align:center;flex:1;display:flex;flex-direction:column;gap:4px">
                 <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2Name}</div>
@@ -703,6 +713,8 @@ function showStats(s) {
     const el = document.getElementById('stats-panel');
     const accuracy = s.withPredictions > 0 ? Math.round((s.correct / s.withPredictions) * 100) : 0;
     const wrongPct = s.withPredictions > 0 ? Math.round((s.wrong / s.withPredictions) * 100) : 0;
+    const overallAccuracy = s.overall?.total > 0 ? Math.round((s.overall.correct / s.overall.total) * 100) : 0;
+    const overallWrongPct = s.overall?.total > 0 ? Math.round((s.overall.wrong / s.overall.total) * 100) : 0;
 
     el.innerHTML = `
         <div class="stats-period">
@@ -713,6 +725,25 @@ function showStats(s) {
             <button class="period-btn" data-period="month">Mês</button>
             <button class="period-btn" data-period="year">Ano</button>
         </div>
+        ${s.overall && s.overall.total > 0 ? `
+        <div class="accuracy-box">
+            <h4>Previsões Gerais</h4>
+            <div class="accuracy-grid">
+                <div class="accuracy-item total">
+                    <span class="acc-value">${s.overall.total}</span>
+                    <span class="acc-label">Total</span>
+                </div>
+                <div class="accuracy-item correct">
+                    <span class="acc-value">${s.overall.correct}</span>
+                    <span class="acc-label">Acertos (${overallAccuracy}%)</span>
+                </div>
+                <div class="accuracy-item wrong">
+                    <span class="acc-value">${s.overall.wrong}</span>
+                    <span class="acc-label">Falhas (${overallWrongPct}%)</span>
+                </div>
+            </div>
+        </div>
+        ` : ''}
         <div class="stats-grid">
             <div class="stat"><div class="stat-value">${s.todayGames}</div><div class="stat-label">Jogos Hoje</div></div>
             <div class="stat"><div class="stat-value">${s.live}</div><div class="stat-label">Live</div></div>
@@ -720,7 +751,7 @@ function showStats(s) {
             <div class="stat"><div class="stat-value">${s.total}</div><div class="stat-label">Total</div></div>
         </div>
         <div class="accuracy-box">
-            <h4>Previsões</h4>
+            <h4>Previsões por Período</h4>
             <div class="accuracy-grid">
                 <div class="accuracy-item total">
                     <span class="acc-value">${s.withPredictions}</span>

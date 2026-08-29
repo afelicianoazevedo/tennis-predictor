@@ -362,6 +362,10 @@ async function collectResults(candidateIds) {
             const matchStatus = mapStatus(detail.status);
             if (matchStatus === 'completed') {
                 await supabaseUpsert(detail);
+                const matchWinnerId = detail.winner ? (await syncPlayer(detail.winner)) : null;
+                if (matchWinnerId) {
+                    await updatePredictionResults(m.api_id, matchWinnerId);
+                }
                 markProcessed(m.api_id);
                 verified++;
             }
@@ -370,6 +374,37 @@ async function collectResults(candidateIds) {
     }
 
     console.log(`Results: verified ${verified} completed matches. Requests: ${state.dailyRequests}/100`);
+}
+
+async function updatePredictionResults(matchId, winnerId) {
+    if (!matchId || !winnerId) return;
+
+    const predictionsRes = await fetch(`${SUPABASE_URL}/rest/v1/match_predictions?match_id=eq.${matchId}&select=id,predicted_winner_id&apikey=${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY}`, {
+        headers: {
+            'apikey': SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY}`
+        }
+    });
+
+    if (!predictionsRes.ok) return;
+    const predictions = await predictionsRes.json();
+    if (!predictions || predictions.length === 0) return;
+
+    for (const pred of predictions) {
+        const wasCorrect = pred.predicted_winner_id === winnerId;
+        await fetch(`${SUPABASE_URL}/rest/v1/match_predictions?id=eq.${pred.id}`, {
+            method: 'PATCH',
+            headers: {
+                'apikey': SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY || SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                was_correct: wasCorrect,
+                result: wasCorrect ? 'correct' : 'incorrect'
+            })
+        });
+    }
 }
 
 async function collectStaleUpcoming() {
