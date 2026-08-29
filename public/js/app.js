@@ -11,6 +11,7 @@ let resultsFilter = 'all';
 let resultsDate = getLocalYMD(new Date());
 let resultsData = {};
 let resultsPollInterval = null;
+let currentStatsPeriod = 'all';
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -717,29 +718,20 @@ function showStats(s) {
     const overallWrongPct = s.overall?.total > 0 ? Math.round((s.overall.wrong / s.overall.total) * 100) : 0;
 
     el.innerHTML = `
-        <div class="stats-period">
-            <button class="period-btn active" data-period="all">Todos</button>
-            <button class="period-btn" data-period="day">Hoje</button>
-            <button class="period-btn" data-period="yesterday">Ontem</button>
-            <button class="period-btn" data-period="week">Semana</button>
-            <button class="period-btn" data-period="month">Mês</button>
-            <button class="period-btn" data-period="year">Ano</button>
-        </div>
         ${s.overall && s.overall.total > 0 ? `
-        <div class="accuracy-box">
-            <h4>Previsões Gerais</h4>
-            <div class="accuracy-grid">
-                <div class="accuracy-item total">
-                    <span class="acc-value">${s.overall.total}</span>
-                    <span class="acc-label">Total</span>
+        <div class="overall-accuracy-box">
+            <div class="overall-accuracy-header">
+                <div class="overall-accuracy-percentage">${overallAccuracy}%</div>
+                <div class="overall-accuracy-label">Precisão Global</div>
+            </div>
+            <div class="overall-accuracy-grid">
+                <div class="overall-accuracy-item correct">
+                    <span class="overall-accuracy-value">${s.overall.correct}</span>
+                    <span class="overall-accuracy-label">Acertos</span>
                 </div>
-                <div class="accuracy-item correct">
-                    <span class="acc-value">${s.overall.correct}</span>
-                    <span class="acc-label">Acertos (${overallAccuracy}%)</span>
-                </div>
-                <div class="accuracy-item wrong">
-                    <span class="acc-value">${s.overall.wrong}</span>
-                    <span class="acc-label">Falhas (${overallWrongPct}%)</span>
+                <div class="overall-accuracy-item wrong">
+                    <span class="overall-accuracy-value">${s.overall.wrong}</span>
+                    <span class="overall-accuracy-label">Falhas</span>
                 </div>
             </div>
         </div>
@@ -780,26 +772,17 @@ function showStats(s) {
     `;
 
     renderAccuracyChart(s.correct, s.wrong, accuracy, wrongPct);
+    renderOverallAccuracyChart(s.overall);
     renderTrendCharts(s.trendStats);
 
-    el.querySelectorAll('.period-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            el.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const period = btn.dataset.period;
-            try {
-                const newStats = await loadStats(period);
-                showStats(newStats);
-            } catch (e) {
-                toast('Erro: ' + e.message);
-            }
-        });
+    document.querySelectorAll('.stats-filters .period-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.period === currentStatsPeriod);
     });
 }
 
 function renderTrendPanels(trendStats) {
     const levels = [
-        { key: 'incerto', label: 'Incerco', class: 'uncertain' },
+        { key: 'incerto', label: 'Incerto', class: 'uncertain' },
         { key: 'perigoso', label: 'Perigoso', class: 'dangerous' },
         { key: 'tendencia', label: 'Tendência', class: 'tendency' },
         { key: 'forte', label: 'Forte', class: 'strong' }
@@ -927,6 +910,65 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                     callbacks: {
                         label: function(context) {
                             const total = correct + wrong;
+                            const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
+                            return `${context.raw} (${pct}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, color: '#94a3b8' },
+                    grid: { color: '#334155' }
+                },
+                x: {
+                    ticks: { color: '#f1f5f9' },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
+function renderOverallAccuracyChart(overall) {
+    if (!overall || overall.total === 0) return;
+
+    const ctx = document.getElementById('accuracy-chart');
+    if (!ctx) return;
+
+    if (window.overallAccuracyChartInstance) {
+        window.overallAccuracyChartInstance.destroy();
+    }
+
+    const accuracy = overall.total > 0 ? Math.round((overall.correct / overall.total) * 100) : 0;
+
+    window.overallAccuracyChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Acertos', 'Falhas'],
+            datasets: [{
+                label: 'Previsões Globais',
+                data: [overall.correct, overall.wrong],
+                backgroundColor: ['#22c55e', '#ef4444'],
+                borderRadius: 8,
+                barThickness: 40
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: `Precisão Global: ${accuracy}%`,
+                    color: '#f1f5f9',
+                    font: { size: 14, weight: 'bold' }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = overall.correct + overall.wrong;
                             const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
                             return `${context.raw} (${pct}%)`;
                         }
@@ -1209,7 +1251,7 @@ async function switchTab(tab) {
     if (tab === 'stats') {
         loader(true);
         try {
-            const s = await loadStats('all');
+            const s = await loadStats(currentStatsPeriod);
             showStats(s);
         } catch (e) {
             log('ERROR loading stats: ' + e.message);
@@ -1382,6 +1424,25 @@ document.addEventListener('DOMContentLoaded', () => {
             renderFiltered();
         });
     }
+
+    document.querySelectorAll('.stats-filters .period-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            document.querySelectorAll('.stats-filters .period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentStatsPeriod = btn.dataset.period;
+            if (currentTab === 'stats') {
+                loader(true);
+                try {
+                    const s = await loadStats(currentStatsPeriod);
+                    showStats(s);
+                } catch (e) {
+                    toast('Erro: ' + e.message);
+                } finally {
+                    loader(false);
+                }
+            }
+        });
+    });
 
     document.querySelector('.modal-close').addEventListener('click', () => {
         document.getElementById('modal').classList.remove('active');

@@ -426,23 +426,29 @@ body {
     visibility: hidden;
 }
 
-/* Stats period selector */
-.stats-period {
+/* Stats filters */
+.stats-filters {
     display: flex;
+    align-items: center;
     gap: 6px;
-    margin-bottom: 16px;
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    flex-wrap: nowrap;
 }
 
 .period-btn {
-    flex: 1;
-    padding: 8px;
-    border-radius: 20px;
+    padding: 6px 12px;
+    border-radius: 16px;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--text-dim);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     cursor: pointer;
     transition: all 0.2s;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .period-btn.active {
@@ -453,6 +459,83 @@ body {
 
 .period-btn:hover {
     border-color: var(--accent);
+}
+
+/* Overall accuracy */
+.overall-accuracy-box {
+    margin-top: 16px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg));
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    border: 1px solid var(--border);
+}
+
+.overall-accuracy-header {
+    margin-bottom: 16px;
+}
+
+.overall-accuracy-percentage {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.overall-accuracy-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.overall-accuracy-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+
+.overall-accuracy-item {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+}
+
+.overall-accuracy-item.correct {
+    border: 1px solid #22c55e40;
+}
+
+.overall-accuracy-item.wrong {
+    border: 1px solid #ef444440;
+}
+
+.overall-accuracy-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.overall-accuracy-item.correct .overall-accuracy-value {
+    color: #22c55e;
+}
+
+.overall-accuracy-item.wrong .overall-accuracy-value {
+    color: #ef4444;
+}
+
+.overall-accuracy-item .overall-accuracy-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+}
+
+/* Stats period selector */
+.stats-period {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 16px;
 }
 
 /* Accuracy box */
@@ -567,47 +650,42 @@ body {
 .trend-panels {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
+    gap: 8px;
 }
 
 .trend-panel {
     background: var(--bg-card);
     border-radius: var(--radius);
-    padding: 14px;
+    padding: 10px;
     border-left: 3px solid var(--border);
 }
-
-.trend-panel.uncertain { border-left-color: var(--c-uncertain); }
-.trend-panel.dangerous { border-left-color: var(--c-dangerous); }
-.trend-panel.tendency { border-left-color: var(--c-tendency); }
-.trend-panel.strong { border-left-color: var(--c-strong); }
 
 .trend-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    margin-bottom: 8px;
 }
 
 .trend-label {
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
 }
 
 .trend-total {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: var(--text-dim);
 }
 
 .trend-stats {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 6px;
 }
 
 .trend-stat {
     text-align: center;
-    padding: 8px;
+    padding: 6px;
     border-radius: 6px;
     background: var(--bg);
 }
@@ -622,7 +700,7 @@ body {
 
 .trend-value {
     display: block;
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 700;
 }
 
@@ -636,28 +714,28 @@ body {
 
 .trend-pct {
     display: block;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     color: var(--text-dim);
     margin-top: 2px;
 }
 
 .trend-charts {
-    margin-top: 20px;
+    margin-top: 16px;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    gap: 12px;
 }
 
 .trend-charts canvas {
-    max-height: 200px;
+    max-height: 180px;
 }
 
 @media (min-width: 768px) {
     .trend-panels {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
     .trend-charts {
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(3, 1fr);
     }
 }
 
