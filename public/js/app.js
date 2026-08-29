@@ -11,7 +11,7 @@ let resultsFilter = 'all';
 let resultsDate = getLocalYMD(new Date());
 let resultsData = {};
 let resultsPollInterval = null;
-let currentStatsPeriod = 'all';
+let currentStatsPeriod = 'day';
 
 function log(msg) {
     console.log('[TennisPred]', msg);
@@ -173,7 +173,7 @@ async function cleanupOrphanMatches() {
     }
 }
 
-async function loadStats(period = 'all', gameType = 'all') {
+async function loadStats(period = 'day', gameType = 'all') {
     let start = null;
     let end = null;
     const now = new Date();
@@ -749,7 +749,7 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                 meta0.data.forEach((bar, index) => {
                     const value = chart.data.datasets[0].data[index];
                     const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-                    ctx.fillText(`${pct}%`, bar.x, bar.y - 8);
+                    ctx.fillText(`${pct}%`, bar.x, bar.y - 12);
                 });
                 ctx.restore();
             }

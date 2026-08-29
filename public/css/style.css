@@ -561,7 +561,8 @@ body {
 
 .chart-container {
     max-width: 500px;
-    margin: 16px auto 0;
+    margin: 24px auto 0;
+    padding-top: 20px;
 }
 
 /* Modal */
