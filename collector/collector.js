@@ -319,7 +319,7 @@ async function collectResults(candidateIds) {
     }
 
     const supabaseIds = unprocessed.slice(0, 200).join(',');
-    const matchesUrl = `${SUPABASE_URL}/rest/v1/matches?id=in.(${supabaseIds})&select=id,category,confidence_score,predicted_winner_id,player1_name,player2_name,scheduled_at&apikey=${SUPABASE_KEY}`;
+    const matchesUrl = `${SUPABASE_URL}/rest/v1/matches?api_id=in.(${supabaseIds})&select=id,api_id,category,confidence_score,predicted_winner_id,player1_name,player2_name,scheduled_at&apikey=${SUPABASE_KEY}`;
     const matchesRes = await fetch(matchesUrl, {
         headers: {
             'apikey': SUPABASE_KEY,
@@ -357,12 +357,12 @@ async function collectResults(candidateIds) {
     let verified = 0;
     for (const m of toCheck) {
         if (state.dailyRequests >= 100) break;
-        const detail = await liveRequest(`/matches/${m.id}`);
+        const detail = await liveRequest(`/matches/${m.api_id}`);
         if (detail?.status) {
             const matchStatus = mapStatus(detail.status);
             if (matchStatus === 'completed') {
                 await supabaseUpsert(detail);
-                markProcessed(m.id);
+                markProcessed(m.api_id);
                 verified++;
             }
         }
@@ -370,6 +370,32 @@ async function collectResults(candidateIds) {
     }
 
     console.log(`Results: verified ${verified} completed matches. Requests: ${state.dailyRequests}/100`);
+}
+
+async function collectStaleUpcoming() {
+    const now = new Date().toISOString();
+    const staleUrl = `${SUPABASE_URL}/rest/v1/matches?status=eq.upcoming&scheduled_at=lte.${now}&select=api_id,scheduled_at,category&limit=20&apikey=${SUPABASE_KEY}`;
+    const staleRes = await fetch(staleUrl, {
+        headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+    });
+
+    if (!staleRes.ok) {
+        console.error(`Error fetching stale matches: ${staleRes.status}`);
+        return;
+    }
+
+    const staleMatches = await staleRes.json();
+    const staleIds = staleMatches
+        .filter(m => !isProcessed(m.api_id) && m.category !== 'D')
+        .map(m => m.api_id);
+
+    if (staleIds.length > 0) {
+        console.log(`Found ${staleIds.length} stale upcoming matches.`);
+        await collectResults(staleIds);
+    }
 }
 
 async function collectOdds() {
@@ -676,6 +702,8 @@ async function main() {
     } else if (MODE === 'all') {
         await collectUpcoming();
         await collectLive();
+        await collectResults([...new Set(state.trackedIds)].filter(id => !isProcessed(id)));
+        await collectStaleUpcoming();
         await collectOdds();
     } else {
         switch (MODE) {
