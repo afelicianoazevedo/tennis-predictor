@@ -736,6 +736,11 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                 }
             }
         },
+        layout: {
+            padding: {
+                top: 20
+            }
+        },
         plugins: [{
             id: 'percentageOnTop',
             afterDatasetsDraw: function(chart) {
@@ -749,7 +754,8 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                 meta0.data.forEach((bar, index) => {
                     const value = chart.data.datasets[0].data[index];
                     const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-                    ctx.fillText(`${pct}%`, bar.x, bar.y - 12);
+                    const textY = Math.max(bar.y - 8, 10);
+                    ctx.fillText(`${pct}%`, bar.x, textY);
                 });
                 ctx.restore();
             }
