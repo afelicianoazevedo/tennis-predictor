@@ -99,6 +99,11 @@ async function supabaseUpsert(match) {
     const player1Id = await syncPlayer(p1);
     const player2Id = await syncPlayer(p2);
 
+    let winnerId = null;
+    if (match.winner) {
+        winnerId = await syncPlayer({ id: match.winner, name: '' });
+    }
+
     const payload = {
         api_id: externalId,
         scheduled_at: scheduledAt,
@@ -112,7 +117,8 @@ async function supabaseUpsert(match) {
         tournament_name: match.tournament?.name || null,
         player1_id: player1Id,
         player2_id: player2Id,
-        category: getCategory(match, p1.name, p2.name)
+        category: getCategory(match, p1.name, p2.name),
+        winner_id: winnerId
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
@@ -128,6 +134,7 @@ async function supabaseUpsert(match) {
         existing = await res.json();
     }
 
+    let matchId = null;
     if (existing.length > 0) {
         await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
             method: 'PATCH',
@@ -138,30 +145,35 @@ async function supabaseUpsert(match) {
             },
             body: JSON.stringify(payload)
         });
-        return existing[0].id;
+        matchId = existing[0].id;
+    } else {
+        const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': `Bearer ${SUPABASE_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!insertRes.ok) {
+            return null;
+        }
+
+        try {
+            const inserted = await insertRes.json();
+            matchId = inserted?.id || inserted?.[0]?.id || null;
+        } catch (e) {
+            return null;
+        }
     }
 
-    const insertRes = await fetch(`${SUPABASE_URL}/rest/v1/matches`, {
-        method: 'POST',
-        headers: {
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-    });
-
-    if (!insertRes.ok) {
-        return null;
+    if (matchId && mapStatus(match.status) === 'completed' && winnerId) {
+        await updatePredictionResults(matchId, winnerId);
     }
 
-    let inserted = null;
-    try {
-        inserted = await insertRes.json();
-    } catch (e) {
-        return null;
-    }
-    return inserted?.id || inserted?.[0]?.id || null;
+    return matchId;
 }
 
 async function syncPlayer(player) {
@@ -361,10 +373,10 @@ async function collectResults(candidateIds) {
         if (detail?.status) {
             const matchStatus = mapStatus(detail.status);
             if (matchStatus === 'completed') {
-                await supabaseUpsert(detail);
+                const internalMatchId = await supabaseUpsert(detail);
                 const matchWinnerId = detail.winner ? (await syncPlayer(detail.winner)) : null;
-                if (matchWinnerId) {
-                    await updatePredictionResults(m.api_id, matchWinnerId);
+                if (internalMatchId && matchWinnerId) {
+                    await updatePredictionResults(internalMatchId, matchWinnerId);
                 }
                 markProcessed(m.api_id);
                 verified++;

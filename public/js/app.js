@@ -193,15 +193,8 @@ async function loadStats(period = 'all', gameType = 'all') {
         start = new Date(now.getFullYear(), 0, 1).toISOString();
     }
 
-    const predictions = await api('match_predictions', {
-        select: 'id,was_correct,created_at,confidence_score',
-        order: 'created_at.desc',
-        ...(start ? { gte: { created_at: start } } : {}),
-        ...(end ? { lte: { created_at: end } } : {})
-    });
-
     const matches = await api('matches', {
-        select: 'id,status,scheduled_at,category,player1_id,player2_id,player1_name,player2_name',
+        select: 'id,status,scheduled_at,category,predicted_winner_id,winner_id',
         order: 'scheduled_at.desc',
         ...(start ? { gte: { scheduled_at: start } } : {}),
         ...(end ? { lte: { scheduled_at: end } } : {})
@@ -211,9 +204,10 @@ async function loadStats(period = 'all', gameType = 'all') {
     const total = filteredMatches.length;
     const completed = filteredMatches.filter(m => m.status === 'completed').length;
 
-    const withPredictions = predictions.length;
-    const correct = predictions.filter(p => p.was_correct === true).length;
-    const wrong = predictions.filter(p => p.was_correct === false).length;
+    const withPredictions = filteredMatches.filter(m => m.predicted_winner_id).length;
+    const verified = filteredMatches.filter(m => m.predicted_winner_id && m.winner_id);
+    const correct = verified.filter(m => m.predicted_winner_id === m.winner_id).length;
+    const wrong = verified.filter(m => m.predicted_winner_id !== m.winner_id).length;
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
 
     return { total, completed, withPredictions, correct, wrong, accuracy };
