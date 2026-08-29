@@ -528,6 +528,8 @@ async function attachOddsToMatches(matches, container) {
     for (const m of matches) {
         const p1 = m.player1 || {};
         const p2 = m.player2 || {};
+        const p1Name = p1.name || m.player1_name || 'TBD';
+        const p2Name = p2.name || m.player2_name || 'TBD';
         const card = container.querySelector(`.match[data-id="${m.id}"]`);
         if (!card) continue;
         
@@ -578,8 +580,11 @@ function showModal(m) {
         else if (p2Prob > p1Prob) p2Fav = true;
     }
 
+    const p1Name = p1.name || m.player1_name || 'TBD';
+    const p2Name = p2.name || m.player2_name || 'TBD';
     const favProb = p1Fav ? p1Prob : (p2Fav ? p2Prob : null);
     const favLabel = p1Fav ? p1Name : (p2Fav ? p2Name : null);
+    const wasCorrect = m.status === 'completed' && predId && m.winner_id ? (predId === m.winner_id) : null;
     const showResult = m.status === 'completed' && m.score;
 
     const setsHtml = (m.sets && m.status === 'completed') ? (() => {
@@ -624,6 +629,15 @@ function showModal(m) {
             </div>
         </div>
         ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${p1Prob.toFixed(1)}%</strong> vs <strong>${p2Prob.toFixed(1)}%</strong></div>` : ''}
+        <div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;text-align:center">
+            <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Previsão</div>
+            <div style="font-weight:700;font-size:0.95rem">${favLabel || (p1Prob > p2Prob ? p1Name : p2Name)}</div>
+            <div style="margin-top:6px">
+                ${favProb != null ? `<span class="confidence ${cc}">${favProb.toFixed(1)}%</span>` : ''}
+                ${cs != null ? `<span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px">${confLabel(cs)} ${cs.toFixed(0)}%</span>` : ''}
+            </div>
+            ${showResult && wasCorrect != null ? `<div style="margin-top:6px;font-size:0.8rem;color:${wasCorrect ? '#22c55e' : '#ef4444'};font-weight:600">${wasCorrect ? '✓ Previsão correta' : '✗ Previsão incorreta'}</div>` : ''}
+        </div>
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         <div id="modal-factors" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
             <div class="factors-loading">A carregar fatores de previsão e odds...</div>
