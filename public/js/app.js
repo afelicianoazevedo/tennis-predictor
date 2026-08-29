@@ -173,7 +173,7 @@ async function cleanupOrphanMatches() {
     }
 }
 
-async function loadStats(period = 'all') {
+async function loadStats(period = 'all', gameType = 'all') {
     let start = null;
     let end = null;
     const now = new Date();
@@ -181,11 +181,6 @@ async function loadStats(period = 'all') {
     if (period === 'day') {
         start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
         end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
-    } else if (period === 'yesterday') {
-        const yesterday = new Date(now);
-        yesterday.setDate(yesterday.getDate() - 1);
-        start = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()).toISOString();
-        end = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     } else if (period === 'week') {
         const day = now.getDay();
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
@@ -205,55 +200,23 @@ async function loadStats(period = 'all') {
         ...(end ? { lte: { created_at: end } } : {})
     });
 
-    const allPredictions = await api('match_predictions', {
-        select: 'id,was_correct,confidence_score',
-        order: 'created_at.desc',
-        limit: 1000
-    });
-
     const matches = await api('matches', {
-        select: 'id,status,scheduled_at',
+        select: 'id,status,scheduled_at,category,player1_id,player2_id,player1_name,player2_name',
         order: 'scheduled_at.desc',
         ...(start ? { gte: { scheduled_at: start } } : {}),
         ...(end ? { lte: { scheduled_at: end } } : {})
     });
 
-    const today = now.toISOString().split('T')[0];
-    const todayGames = matches.filter(m => m.scheduled_at?.startsWith(today)).length;
-    const live = matches.filter(m => m.status === 'live').length;
-    const completed = matches.filter(m => m.status === 'completed').length;
+    const filteredMatches = filterMatches(matches, gameType);
+    const total = filteredMatches.length;
+    const completed = filteredMatches.filter(m => m.status === 'completed').length;
 
     const withPredictions = predictions.length;
     const correct = predictions.filter(p => p.was_correct === true).length;
     const wrong = predictions.filter(p => p.was_correct === false).length;
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
-    const wrongPct = withPredictions > 0 ? Math.round((wrong / withPredictions) * 100) : 0;
 
-    const overallCorrect = allPredictions.filter(p => p.was_correct === true).length;
-    const overallWrong = allPredictions.filter(p => p.was_correct === false).length;
-    const overallTotal = allPredictions.filter(p => p.was_correct != null).length;
-    const overallAccuracy = overallTotal > 0 ? Math.round((overallCorrect / overallTotal) * 100) : 0;
-    const overallWrongPct = overallTotal > 0 ? Math.round((overallWrong / overallTotal) * 100) : 0;
-
-    const trendStats = {
-        incerto: { total: 0, correct: 0, wrong: 0 },
-        perigoso: { total: 0, correct: 0, wrong: 0 },
-        tendencia: { total: 0, correct: 0, wrong: 0 },
-        forte: { total: 0, correct: 0, wrong: 0 }
-    };
-
-    predictions.forEach(p => {
-        if (!p.was_correct || !p.confidence_score) return;
-        let level = 'incerto';
-        if (p.confidence_score >= 50) level = 'perigoso';
-        if (p.confidence_score >= 60) level = 'tendencia';
-        if (p.confidence_score >= 70) level = 'forte';
-        trendStats[level].total++;
-        if (p.was_correct === true) trendStats[level].correct++;
-        if (p.was_correct === false) trendStats[level].wrong++;
-    });
-
-    return { todayGames, live, completed, withPredictions, correct, wrong, accuracy, wrongPct, total: matches.length, trendStats, overall: { total: overallTotal, correct: overallCorrect, wrong: overallWrong, accuracy: overallAccuracy, wrongPct: overallWrongPct } };
+    return { total, completed, withPredictions, correct, wrong, accuracy };
 }
 
 function time(d) {
@@ -558,7 +521,8 @@ function renderMatches(matches, containerId) {
         log('ERROR: container not found: ' + containerId);
         return;
     }
-    const counter = document.getElementById('match-counter');
+    const counterId = containerId === 'results-list' ? 'results-counter' : 'match-counter';
+    const counter = document.getElementById(counterId);
     if (counter) counter.textContent = matches.length;
     if (!matches.length) {
         el.innerHTML = '<div class="empty"><div class="empty-icon">🎾</div><p>Nenhum jogo</p></div>';
@@ -714,171 +678,21 @@ function showStats(s) {
     const el = document.getElementById('stats-panel');
     const accuracy = s.withPredictions > 0 ? Math.round((s.correct / s.withPredictions) * 100) : 0;
     const wrongPct = s.withPredictions > 0 ? Math.round((s.wrong / s.withPredictions) * 100) : 0;
-    const overallAccuracy = s.overall?.total > 0 ? Math.round((s.overall.correct / s.overall.total) * 100) : 0;
-    const overallWrongPct = s.overall?.total > 0 ? Math.round((s.overall.wrong / s.overall.total) * 100) : 0;
 
     el.innerHTML = `
-        ${s.overall && s.overall.total > 0 ? `
-        <div class="overall-accuracy-box">
-            <div class="overall-accuracy-header">
-                <div class="overall-accuracy-percentage">${overallAccuracy}%</div>
-                <div class="overall-accuracy-label">Precisão Global</div>
-            </div>
-            <div class="overall-accuracy-grid">
-                <div class="overall-accuracy-item correct">
-                    <span class="overall-accuracy-value">${s.overall.correct}</span>
-                    <span class="overall-accuracy-label">Acertos</span>
-                </div>
-                <div class="overall-accuracy-item wrong">
-                    <span class="overall-accuracy-value">${s.overall.wrong}</span>
-                    <span class="overall-accuracy-label">Falhas</span>
-                </div>
-            </div>
-        </div>
-        ` : ''}
-        <div class="stats-grid">
-            <div class="stat"><div class="stat-value">${s.todayGames}</div><div class="stat-label">Jogos Hoje</div></div>
-            <div class="stat"><div class="stat-value">${s.live}</div><div class="stat-label">Live</div></div>
-            <div class="stat"><div class="stat-value">${s.completed}</div><div class="stat-label">Terminados</div></div>
+        <div class="stats-summary">
             <div class="stat"><div class="stat-value">${s.total}</div><div class="stat-label">Total</div></div>
-        </div>
-        <div class="accuracy-box">
-            <h4>Previsões por Período</h4>
-            <div class="accuracy-grid">
-                <div class="accuracy-item total">
-                    <span class="acc-value">${s.withPredictions}</span>
-                    <span class="acc-label">Total</span>
-                </div>
-                <div class="accuracy-item correct">
-                    <span class="acc-value">${s.correct}</span>
-                    <span class="acc-label">Acertos (${accuracy}%)</span>
-                </div>
-                <div class="accuracy-item wrong">
-                    <span class="acc-value">${s.wrong}</span>
-                    <span class="acc-label">Falhas (${wrongPct}%)</span>
-                </div>
-            </div>
+            <div class="stat"><div class="stat-value">${s.completed}</div><div class="stat-label">Terminados</div></div>
         </div>
         <div class="chart-container">
             <canvas id="accuracy-chart"></canvas>
         </div>
-        <div class="trend-stats-section">
-            <h4>Acertos por Tendência</h4>
-            <div class="trend-panels">
-                ${renderTrendPanels(s.trendStats)}
-            </div>
-        </div>
-        <div id="trend-charts" class="trend-charts"></div>
     `;
 
     renderAccuracyChart(s.correct, s.wrong, accuracy, wrongPct);
-    renderOverallAccuracyChart(s.overall);
-    renderTrendCharts(s.trendStats);
 
     document.querySelectorAll('.stats-filters .period-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.period === currentStatsPeriod);
-    });
-}
-
-function renderTrendPanels(trendStats) {
-    const levels = [
-        { key: 'incerto', label: 'Incerto', class: 'uncertain' },
-        { key: 'perigoso', label: 'Perigoso', class: 'dangerous' },
-        { key: 'tendencia', label: 'Tendência', class: 'tendency' },
-        { key: 'forte', label: 'Forte', class: 'strong' }
-    ];
-
-    return levels.map(level => {
-        const data = trendStats[level.key] || { total: 0, correct: 0, wrong: 0 };
-        const accuracy = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
-        const wrongPct = data.total > 0 ? Math.round((data.wrong / data.total) * 100) : 0;
-
-        return `
-            <div class="trend-panel ${level.class}">
-                <div class="trend-header">
-                    <span class="trend-label">${level.label}</span>
-                    <span class="trend-total">${data.total} previsões</span>
-                </div>
-                <div class="trend-stats">
-                    <div class="trend-stat correct">
-                        <span class="trend-value">${data.correct}</span>
-                        <span class="trend-pct">${accuracy}%</span>
-                    </div>
-                    <div class="trend-stat wrong">
-                        <span class="trend-value">${data.wrong}</span>
-                        <span class="trend-pct">${wrongPct}%</span>
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function renderTrendCharts(trendStats) {
-    const levels = [
-        { key: 'incerto', label: 'Incerco', color: '#f59e0b' },
-        { key: 'perigoso', label: 'Perigoso', color: '#f97316' },
-        { key: 'tendencia', label: 'Tendência', color: '#3b82f6' },
-        { key: 'forte', label: 'Forte', color: '#22c55e' }
-    ];
-
-    const container = document.getElementById('trend-charts');
-    if (!container) return;
-    container.innerHTML = '';
-
-    levels.forEach(level => {
-        const data = trendStats[level.key] || { total: 0, correct: 0, wrong: 0 };
-        const canvas = document.createElement('canvas');
-        canvas.id = `trend-chart-${level.key}`;
-        canvas.style.maxWidth = '300px';
-        canvas.style.margin = '0 auto 16px';
-        container.appendChild(canvas);
-
-        new Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels: ['Acertos', 'Falhas'],
-                datasets: [{
-                    label: level.label,
-                    data: [data.correct, data.wrong],
-                    backgroundColor: ['#22c55e', '#ef4444'],
-                    borderRadius: 6,
-                    barThickness: 24
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { display: false },
-                    title: {
-                        display: true,
-                        text: level.label,
-                        color: '#f1f5f9',
-                        font: { size: 14 }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const total = data.correct + data.wrong;
-                                const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
-                                return `${context.raw} (${pct}%)`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1, color: '#94a3b8' },
-                        grid: { color: '#334155' }
-                    },
-                    x: {
-                        ticks: { color: '#f1f5f9' },
-                        grid: { display: false }
-                    }
-                }
-            }
-        });
     });
 }
 
@@ -899,7 +713,7 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                 data: [correct, wrong],
                 backgroundColor: ['#22c55e', '#ef4444'],
                 borderRadius: 8,
-                barThickness: 40
+                barThickness: 60
             }]
         },
         options: {
@@ -927,66 +741,25 @@ function renderAccuracyChart(correct, wrong, accuracy, wrongPct) {
                     grid: { display: false }
                 }
             }
-        }
-    });
-}
-
-function renderOverallAccuracyChart(overall) {
-    if (!overall || overall.total === 0) return;
-
-    const ctx = document.getElementById('accuracy-chart');
-    if (!ctx) return;
-
-    if (window.overallAccuracyChartInstance) {
-        window.overallAccuracyChartInstance.destroy();
-    }
-
-    const accuracy = overall.total > 0 ? Math.round((overall.correct / overall.total) * 100) : 0;
-
-    window.overallAccuracyChartInstance = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: ['Acertos', 'Falhas'],
-            datasets: [{
-                label: 'Previsões Globais',
-                data: [overall.correct, overall.wrong],
-                backgroundColor: ['#22c55e', '#ef4444'],
-                borderRadius: 8,
-                barThickness: 40
-            }]
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: { display: false },
-                title: {
-                    display: true,
-                    text: `Precisão Global: ${accuracy}%`,
-                    color: '#f1f5f9',
-                    font: { size: 14, weight: 'bold' }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            const total = overall.correct + overall.wrong;
-                            const pct = total > 0 ? Math.round((context.raw / total) * 100) : 0;
-                            return `${context.raw} (${pct}%)`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 1, color: '#94a3b8' },
-                    grid: { color: '#334155' }
-                },
-                x: {
-                    ticks: { color: '#f1f5f9' },
-                    grid: { display: false }
-                }
+        plugins: [{
+            id: 'percentageOnTop',
+            afterDatasetsDraw: function(chart) {
+                const ctx = chart.ctx;
+                const meta0 = chart.getDatasetMeta(0);
+                const total = correct + wrong;
+                ctx.save();
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff';
+                meta0.data.forEach((bar, index) => {
+                    const value = chart.data.datasets[0].data[index];
+                    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+                    ctx.fillText(`${pct}%`, bar.x, bar.y - 8);
+                });
+                ctx.restore();
             }
-        }
+        }]
     });
 }
 
@@ -1425,6 +1198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let currentStatsGameType = 'all';
+
     document.querySelectorAll('.stats-filters .period-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             document.querySelectorAll('.stats-filters .period-btn').forEach(b => b.classList.remove('active'));
@@ -1433,7 +1208,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (currentTab === 'stats') {
                 loader(true);
                 try {
-                    const s = await loadStats(currentStatsPeriod);
+                    const s = await loadStats(currentStatsPeriod, currentStatsGameType);
                     showStats(s);
                 } catch (e) {
                     toast('Erro: ' + e.message);
@@ -1443,6 +1218,23 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    const statsFilterEl = document.getElementById('stats-filter-select');
+    if (statsFilterEl) {
+        statsFilterEl.addEventListener('change', e => {
+            currentStatsGameType = e.target.value;
+            if (currentTab === 'stats') {
+                loader(true);
+                loadStats(currentStatsPeriod, currentStatsGameType).then(s => {
+                    showStats(s);
+                    loader(false);
+                }).catch(e => {
+                    toast('Erro: ' + e.message);
+                    loader(false);
+                });
+            }
+        });
+    }
 
     document.querySelector('.modal-close').addEventListener('click', () => {
         document.getElementById('modal').classList.remove('active');

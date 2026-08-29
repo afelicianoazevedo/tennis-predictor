@@ -82,9 +82,14 @@
             </section>
             <section id="tab-stats" class="panel">
                 <div class="stats-filters">
+                    <select id="stats-filter-select" class="filter-select">
+                        <option value="all">ALL</option>
+                        <option value="men">Man</option>
+                        <option value="women">Woman</option>
+                        <option value="doubles">Doubles</option>
+                    </select>
                     <button class="period-btn active" data-period="all">Todos</button>
                     <button class="period-btn" data-period="day">Hoje</button>
-                    <button class="period-btn" data-period="yesterday">Ontem</button>
                     <button class="period-btn" data-period="week">Semana</button>
                     <button class="period-btn" data-period="month">Mês</button>
                     <button class="period-btn" data-period="year">Ano</button>
@@ -93,7 +98,6 @@
                 <div class="chart-container">
                     <canvas id="accuracy-chart"></canvas>
                 </div>
-                <div id="trend-charts" class="trend-charts"></div>
             </section>
             <section id="tab-settings" class="panel">
                 <div class="settings-group">
