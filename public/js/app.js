@@ -204,7 +204,7 @@ async function loadStats(period = 'all', gameType = 'all') {
     const total = filteredMatches.length;
     const completed = filteredMatches.filter(m => m.status === 'completed').length;
 
-    const withPredictions = filteredMatches.filter(m => m.predicted_winner_id).length;
+    const withPredictions = filteredMatches.filter(m => m.predicted_winner_id && m.winner_id).length;
     const verified = filteredMatches.filter(m => m.predicted_winner_id && m.winner_id);
     const correct = verified.filter(m => m.predicted_winner_id === m.winner_id).length;
     const wrong = verified.filter(m => m.predicted_winner_id !== m.winner_id).length;
