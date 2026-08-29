@@ -259,6 +259,35 @@ function dateShort(d) {
     return `${day}/${month}`;
 }
 
+function getSetCount(m) {
+    if (!m.sets) return null;
+    try {
+        const sets = Array.isArray(m.sets) ? m.sets : JSON.parse(m.sets);
+        if (!Array.isArray(sets)) return null;
+        let p1Sets = 0, p2Sets = 0;
+        for (const s of sets) {
+            if (Array.isArray(s) && s.length >= 2) {
+                if (s[0] > s[1]) p1Sets++;
+                else if (s[1] > s[0]) p2Sets++;
+            }
+        }
+        return `${p1Sets}-${p2Sets}`;
+    } catch (e) {
+        return null;
+    }
+}
+
+function parseSets(m) {
+    if (!m.sets) return [];
+    try {
+        const raw = Array.isArray(m.sets) ? m.sets : JSON.parse(m.sets);
+        if (!Array.isArray(raw)) return [];
+        return raw.filter(s => Array.isArray(s) && s.length >= 2);
+    } catch (e) {
+        return [];
+    }
+}
+
 function confClass(prob, confidenceScore) {
     if (prob == null && confidenceScore == null) return '';
     const value = prob != null ? prob : confidenceScore;
@@ -455,10 +484,9 @@ function renderMatch(m) {
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
     const p1Display = p1Prob != null ? p1Prob.toFixed(1) : null;
     const p2Display = p2Prob != null ? p2Prob.toFixed(1) : null;
-    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${p1Display}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${p2Display}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p1Result = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
-    const p2Result = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check result-icon">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross result-icon">✗</span>' : '';
+    const setCount = getSetCount(m);
+    const p1ResultBadge = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
+    const p2ResultBadge = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
     const p1Name = p1.name || m.player1_name || 'TBD';
     const p2Name = p2.name || m.player2_name || 'TBD';
     const p1Info = `${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''}`;
@@ -480,19 +508,22 @@ function renderMatch(m) {
                 </div>
                         <div class="player-info">${p1Info}${!p1Info && p2Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
-                        ${p1Confidence}${!p1Confidence && (p2Confidence || p2Result) ? '<span class="confidence invisible"></span>' : ''}
-                        ${p1Result}
+                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                            ${p1Confidence}${!p1Confidence && (p2Confidence || p1ResultBadge || p2ResultBadge) ? '<span class="confidence invisible">0%</span>' : ''}
+                            ${p1ResultBadge}
+                        </div>
                     </div>
-                    <div class="match-score-vs">${isCompleted && m.score ? m.score : 'vs'}</div>
-                    ${m.sets && isCompleted ? `<div class="match-sets">Sets: ${m.sets.replace(/[\[\]"]/g, '').replace(/,/g, ' - ')}</div>` : ''}
+                    <div class="match-score-vs">${isCompleted && setCount ? setCount : (isCompleted && m.score ? m.score : 'vs')}</div>
                     <div class="player">
                 <div class="player-name">
                     ${p2Name}
                 </div>
                         <div class="player-info">${p2Info}${!p2Info && p1Info ? '<span class="player-info invisible">-</span>' : ''}</div>
                         <div class="player-odds" style="font-size:0.7rem;color:#fbbf24;display:none"></div>
-                        ${p2Confidence}${!p2Confidence && (p1Confidence || p1Result) ? '<span class="confidence invisible"></span>' : ''}
-                        ${p2Result}
+                        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                            ${p2Confidence}${!p2Confidence && (p1Confidence || p1ResultBadge || p2ResultBadge) ? '<span class="confidence invisible">0%</span>' : ''}
+                            ${p2ResultBadge}
+                        </div>
                     </div>
                 </div>
                 <div class="match-odds" style="font-size:0.7rem;color:var(--text-dim);text-align:center;margin-top:2px;display:none"></div>
@@ -587,23 +618,13 @@ function showModal(m) {
     const wasCorrect = m.status === 'completed' && predId && m.winner_id ? (predId === m.winner_id) : null;
     const showResult = m.status === 'completed' && m.score;
 
-    const setsHtml = (m.sets && m.status === 'completed') ? (() => {
-        let setList = [];
-        if (Array.isArray(m.sets)) {
-            setList = m.sets.map(s => `${s[0]}-${s[1]}`);
-        } else if (typeof m.sets === 'string') {
-            setList = m.sets.split(',').map(s => s.trim()).filter(Boolean);
-        }
-        return setList.map(set => {
-            const parts = set.split('-');
-            if (parts.length !== 2) return `<div style="font-size:0.9rem;margin:2px 0">${set}</div>`;
-            const p1Set = parseInt(parts[0], 10);
-            const p2Set = parseInt(parts[1], 10);
-            const p1Bold = p1Set > p2Set ? 'font-weight:bold;' : '';
-            const p2Bold = p2Set > p1Set ? 'font-weight:bold;' : '';
-            return `<div style="font-size:0.9rem;margin:2px 0"><span style="${p1Bold}">${p1Set}</span>-<span style="${p2Bold}">${p2Set}</span></div>`;
-        }).join('');
-    })() : '';
+    const setsList = m.status === 'completed' ? parseSets(m) : [];
+    const setsHtml = setsList.length > 0 ? setsList.map(s => {
+        const p1Set = s[0], p2Set = s[1];
+        const p1Bold = p1Set > p2Set ? 'font-weight:bold;' : '';
+        const p2Bold = p2Set > p1Set ? 'font-weight:bold;' : '';
+        return `<div style="font-size:0.9rem;margin:2px 0"><span style="${p1Bold}">${p1Set}</span>-<span style="${p2Bold}">${p2Set}</span></div>`;
+    }).join('') : (m.status === 'completed' ? '<div style="font-size:0.8rem;color:var(--text-dim)">Sets não disponíveis</div>' : '');
 
     document.getElementById('modal-content').innerHTML = `
         <h3>${m.tournament_name || tour.name || 'Jogo'}</h3>
