@@ -609,6 +609,7 @@ function showModal(m) {
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''} ${p1.elo_rating && p1.elo_rating !== 1500 ? '(ELO ' + Math.round(p1.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p1" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob.toFixed(1)}%</span>` : ''}
+                ${p1Fav && cs != null ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">Confiança: ${cs.toFixed(0)}%</div>` : ''}
             </div>
             <div style="text-align:center">
                 <div style="font-size:1.2rem;font-weight:bold;color:var(--accent)">${showResult ? m.score : 'VS'}</div>
@@ -619,6 +620,7 @@ function showModal(m) {
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''} ${p2.elo_rating && p2.elo_rating !== 1500 ? '(ELO ' + Math.round(p2.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p2" style="font-size:0.7rem;color:#fbbf24;margin-top:2px"></div>
                 ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob.toFixed(1)}%</span>` : ''}
+                ${p2Fav && cs != null ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">Confiança: ${cs.toFixed(0)}%</div>` : ''}
             </div>
         </div>
         ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${p1Prob.toFixed(1)}%</strong> vs <strong>${p2Prob.toFixed(1)}%</strong></div>` : ''}
