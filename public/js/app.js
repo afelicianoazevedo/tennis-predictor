@@ -902,20 +902,6 @@ function renderOdds(odds) {
 }
 
 function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
-    const factorsHtml = factors ? [
-        ['Força', factors.player1_strength_score, factors.player2_strength_score],
-        ['Forma', factors.player1_form_score, factors.player2_form_score],
-        ['Superfície', factors.player1_surface_score, factors.player2_surface_score],
-        ['Serve', factors.player1_serve_score, factors.player2_serve_score],
-        ['Return', factors.player1_return_score, factors.player2_return_score],
-        ['H2H', factors.player1_h2h_score, factors.player2_h2h_score],
-        ['Mercado', factors.player1_market_score, factors.player2_market_score],
-        ['Contexto', factors.player1_context_score, factors.player2_context_score]
-    ].map(([label, p1Score, p2Score]) => renderFactorBar(label, p1Score, p2Score, p1Name, p2Name)).filter(Boolean).join('') : '';
-    
-    const agreement = (factors && typeof factors.agreement_score === 'number') ? Math.round(factors.agreement_score) : null;
-    const dataQuality = (factors && typeof factors.data_quality_score === 'number') ? Math.round(factors.data_quality_score) : null;
-
     let calculationHtml = '';
     if (p1 && p2) {
         const p1Elo = p1.elo_rating || 1500;
@@ -987,31 +973,11 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
         `;
     }
 
-    if (!factors && !calculationHtml) {
+    if (!calculationHtml) {
         return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
     }
 
-    return `
-        <div class="factors-section">
-            <div class="factors-title">📊 Fatores de Previsão</div>
-            ${factorsHtml}
-            <div class="factors-summary">
-                ${agreement !== null ? `
-                    <div class="factors-summary-row">
-                        <span class="factors-summary-label">Acordo</span>
-                        <span class="factors-summary-value">${agreement}%</span>
-                    </div>
-                ` : ''}
-                ${dataQuality !== null ? `
-                    <div class="factors-summary-row">
-                        <span class="factors-summary-label">Qualidade</span>
-                        <span class="factors-summary-value">${dataQuality}%</span>
-                    </div>
-                ` : ''}
-            </div>
-        </div>
-        ${calculationHtml}
-    `;
+    return calculationHtml;
 }
 
 let previousMatchStatuses = {};
