@@ -104,11 +104,19 @@ async function supabaseUpsert(match) {
         winnerId = await syncPlayer({ id: match.winner, name: '' });
     }
 
+    let status = mapStatus(match.status);
+    let score = formatScore(match);
+
+    if (status === 'completed' && isZeroZeroResult(match)) {
+        status = 'cancelled';
+        score = null;
+    }
+
     const payload = {
         api_id: externalId,
         scheduled_at: scheduledAt,
-        status: mapStatus(match.status),
-        score: formatScore(match),
+        status: status,
+        score: score,
         sets: match.score?.sets ? JSON.stringify(match.score.sets) : null,
         round: match.round || null,
         surface: match.surface || null,
@@ -118,7 +126,7 @@ async function supabaseUpsert(match) {
         player1_id: player1Id,
         player2_id: player2Id,
         category: getCategory(match, p1.name, p2.name),
-        winner_id: winnerId
+        winner_id: status === 'cancelled' ? null : winnerId
     };
 
     let res = await fetch(`${SUPABASE_URL}/rest/v1/matches?api_id=eq.${externalId}`, {
@@ -247,6 +255,13 @@ function formatScore(match) {
         return score.games.map(s => `${s[0]}-${s[1]}`).join(', ');
     }
     return null;
+}
+
+function isZeroZeroResult(match) {
+    if (!match.score) return true;
+    const games = match.score.games;
+    if (!games || games.length === 0) return true;
+    return games.every(s => s[0] === 0 && s[1] === 0);
 }
 
 function getCategory(match, p1Name, p2Name) {
@@ -395,6 +410,11 @@ async function collectResults(candidateIds) {
         if (detail?.status) {
             const matchStatus = mapStatus(detail.status);
             if (matchStatus === 'completed') {
+                if (isZeroZeroResult(detail)) {
+                    await supabaseUpsert(detail);
+                    markProcessed(m.api_id);
+                    continue;
+                }
                 const internalMatchId = await supabaseUpsert(detail);
                 const matchWinnerId = detail.winner ? (await syncPlayer(detail.winner)) : null;
                 if (internalMatchId && matchWinnerId) {

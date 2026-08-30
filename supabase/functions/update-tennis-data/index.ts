@@ -178,7 +178,7 @@ async function syncMatches(): Promise<any> {
 
             const { data: byUrl } = await supabase
                 .from("matches")
-                .select("id")
+                .select("id,status")
                 .eq("sportscore_url", matchUrl)
                 .maybeSingle();
 
@@ -189,7 +189,7 @@ async function syncMatches(): Promise<any> {
                 if (matchDate) {
                     const { data: byPlayers } = await supabase
                         .from("matches")
-                        .select("id")
+                        .select("id,status")
                         .eq("player1_id", p1Id)
                         .eq("player2_id", p2Id)
                         .eq("scheduled_at", matchDate)
@@ -200,7 +200,7 @@ async function syncMatches(): Promise<any> {
                     } else {
                         const { data: byPlayersSwapped } = await supabase
                             .from("matches")
-                            .select("id")
+                            .select("id,status")
                             .eq("player1_id", p2Id)
                             .eq("player2_id", p1Id)
                             .eq("scheduled_at", matchDate)
@@ -215,31 +215,39 @@ async function syncMatches(): Promise<any> {
 
             if (existing) {
                 if (!matchData.score || matchData.score === '0-0') {
-                    result.debug.push(`Skipped update 0-0/no-score: ${match.home} vs ${match.away}`);
-                } else {
-                    const { error: updateError } = await supabase
-                        .from("matches")
-                        .update(matchData)
-                        .eq("id", existing.id);
-
-                    if (updateError) {
-                        result.errors.push(`Update ${match.home} vs ${match.away}: ${updateError.message}`);
-                    } else {
-                        result.matches_updated++;
+                    if (existing.status === 'completed') {
+                        result.debug.push(`Skipped update (already completed): ${match.home} vs ${match.away}`);
+                        continue;
                     }
+                    matchData.status = "cancelled";
+                    matchData.score = null;
+                    matchData.winner_id = null;
+                    result.debug.push(`Cancelled 0-0/no-score: ${match.home} vs ${match.away}`);
+                }
+                const { error: updateError } = await supabase
+                    .from("matches")
+                    .update(matchData)
+                    .eq("id", existing.id);
+
+                if (updateError) {
+                    result.errors.push(`Update ${match.home} vs ${match.away}: ${updateError.message}`);
+                } else {
+                    result.matches_updated++;
                 }
             } else {
                 if (!matchData.score || matchData.score === '0-0') {
-                    result.debug.push(`Skipped insert 0-0/no-score: ${match.home} vs ${match.away}`);
-                } else {
-                    const insertData = { ...matchData, created_at: new Date().toISOString() };
-                    const { error: insertError } = await supabase.from("matches").insert(insertData);
+                    matchData.status = "cancelled";
+                    matchData.score = null;
+                    matchData.winner_id = null;
+                    result.debug.push(`Cancelled 0-0/no-score: ${match.home} vs ${match.away}`);
+                }
+                const insertData = { ...matchData, created_at: new Date().toISOString() };
+                const { error: insertError } = await supabase.from("matches").insert(insertData);
 
-                    if (insertError) {
-                        result.errors.push(`Insert ${match.home} vs ${match.away}: ${insertError.message}`);
-                    } else {
-                        result.matches_created++;
-                    }
+                if (insertError) {
+                    result.errors.push(`Insert ${match.home} vs ${match.away}: ${insertError.message}`);
+                } else {
+                    result.matches_created++;
                 }
             }
 
