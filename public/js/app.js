@@ -592,7 +592,7 @@ function showModal(m) {
     if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
         p1Fav = false;
         p2Fav = false;
-    } else if (!predId && p1Prob != null && p2Prob != null) {
+    } else if (predId && p1Prob != null && p2Prob != null) {
         if (p1Prob > p2Prob) p1Fav = true;
         else if (p2Prob > p1Prob) p2Fav = true;
     }
@@ -929,8 +929,10 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
 
         let p1RankProb = null;
         let p2RankProb = null;
-        if (p1Ranking && p2Ranking) {
-            p1RankProb = (1 / p1Ranking) / (1 / p1Ranking + 1 / p2Ranking);
+        if (p1Ranking || p2Ranking) {
+            const r1 = p1Ranking || 2000;
+            const r2 = p2Ranking || 2000;
+            p1RankProb = (1 / r1) / (1 / r1 + 1 / r2);
             p2RankProb = 1 - p1RankProb;
         }
 
