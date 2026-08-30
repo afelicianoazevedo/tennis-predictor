@@ -31,12 +31,15 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
+
+      - name: Verify Node.js version
+        run: node --version
 
       - name: Install dependencies
         working-directory: collector
@@ -71,16 +74,6 @@ jobs:
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add collector/state.json
-          git diff --cached --quiet && echo "No state changes to commit" && exit 0
-          git commit -m "chore: update collector state [skip ci]"
-          git push
-
-      - name: Commit state changes
-        if: always()
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
