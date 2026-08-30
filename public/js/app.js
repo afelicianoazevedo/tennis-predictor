@@ -179,18 +179,21 @@ async function loadStats(period = 'day', gameType = 'all') {
     const now = new Date();
 
     if (period === 'day') {
-        start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-        end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+        const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const tomorrowUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+        start = todayUTC.toISOString();
+        end = tomorrowUTC.toISOString();
     } else if (period === 'week') {
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const weekStart = new Date(now);
-        weekStart.setDate(diff);
+        const day = now.getUTCDay();
+        const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1);
+        const weekStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), diff));
         start = weekStart.toISOString();
     } else if (period === 'month') {
-        start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        start = monthStart.toISOString();
     } else if (period === 'year') {
-        start = new Date(now.getFullYear(), 0, 1).toISOString();
+        const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+        start = yearStart.toISOString();
     }
 
     const matches = await api('matches', {
@@ -210,7 +213,7 @@ async function loadStats(period = 'day', gameType = 'all') {
     const wrong = verified.filter(m => m.predicted_winner_id !== m.winner_id).length;
     const accuracy = withPredictions > 0 ? Math.round((correct / withPredictions) * 100) : 0;
 
-    return { total, completed, withPredictions, correct, wrong, accuracy };
+    return { total: filteredMatches.length, completed: filteredMatches.filter(m => m.status === 'completed').length, withPredictions, correct, wrong, accuracy, verified: correct + wrong };
 }
 
 function time(d) {
@@ -659,7 +662,7 @@ function showModal(m) {
         ]).then(([factors, odds]) => {
             const factorsEl = document.getElementById('modal-factors');
             if (factorsEl) {
-                factorsEl.outerHTML = renderPredictionFactors(factors, p1Name, p2Name, odds);
+                factorsEl.outerHTML = renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2);
             }
             
             if (odds) {
@@ -680,8 +683,8 @@ function showStats(s) {
 
     el.innerHTML = `
         <div class="stats-summary">
-            <div class="stat"><div class="stat-value">${s.total}</div><div class="stat-label">Total</div></div>
             <div class="stat"><div class="stat-value">${s.completed}</div><div class="stat-label">Terminados</div></div>
+            <div class="stat"><div class="stat-value">${s.verified}</div><div class="stat-label">Com Resultado</div></div>
         </div>
         <div class="chart-container">
             <canvas id="accuracy-chart"></canvas>
@@ -892,7 +895,7 @@ function renderOdds(odds) {
     };
 }
 
-function renderPredictionFactors(factors, p1Name, p2Name, odds) {
+function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
     if (!factors) {
         if (odds && odds.player1_odd && odds.player2_odd) {
             const p1Odd = Number(odds.player1_odd).toFixed(2);
@@ -917,7 +920,7 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds) {
         }
         return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
     }
-    
+
     const factorsHtml = [
         ['Força', factors.player1_strength_score, factors.player2_strength_score],
         ['Forma', factors.player1_form_score, factors.player2_form_score],
@@ -927,11 +930,79 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds) {
         ['H2H', factors.player1_h2h_score, factors.player2_h2h_score],
         ['Mercado', factors.player1_market_score, factors.player2_market_score],
         ['Contexto', factors.player1_context_score, factors.player2_context_score]
-    ].map(([label, p1, p2]) => renderFactorBar(label, p1, p2, p1Name, p2Name)).filter(Boolean).join('');
+    ].map(([label, p1Score, p2Score]) => renderFactorBar(label, p1Score, p2Score, p1Name, p2Name)).filter(Boolean).join('');
     
     const agreement = factors.agreement_score !== null ? Math.round(factors.agreement_score) : null;
     const dataQuality = factors.data_quality_score !== null ? Math.round(factors.data_quality_score) : null;
-    
+
+    let calculationHtml = '';
+    if (p1 && p2) {
+        const p1Elo = p1.elo_rating || 1500;
+        const p2Elo = p2.elo_rating || 1500;
+        const p1Ranking = p1.ranking || null;
+        const p2Ranking = p2.ranking || null;
+
+        const eloDiff = p1Elo - p2Elo;
+        const p1EloProb = 1 / (1 + Math.pow(10, -eloDiff / 400));
+        const p2EloProb = 1 - p1EloProb;
+
+        let p1RankProb = null;
+        let p2RankProb = null;
+        if (p1Ranking && p2Ranking) {
+            p1RankProb = (1 / p1Ranking) / (1 / p1Ranking + 1 / p2Ranking);
+            p2RankProb = 1 - p1RankProb;
+        }
+
+        let p1OddsProb = null;
+        let p2OddsProb = null;
+        if (odds && odds.player1_odd && odds.player2_odd) {
+            p1OddsProb = (1 / odds.player1_odd) / (1 / odds.player1_odd + 1 / odds.player2_odd);
+            p2OddsProb = 1 - p1OddsProb;
+        }
+
+        let p1FinalProb, p2FinalProb;
+        if (p1OddsProb !== null) {
+            p1FinalProb = 0.5 * p1EloProb + 0.3 * (p1RankProb || p1EloProb) + 0.2 * p1OddsProb;
+            p2FinalProb = 0.5 * p2EloProb + 0.3 * (p2RankProb || p2EloProb) + 0.2 * p2OddsProb;
+        } else {
+            p1FinalProb = 0.6 * p1EloProb + 0.4 * (p1RankProb || p1EloProb);
+            p2FinalProb = 0.6 * p2EloProb + 0.4 * (p2RankProb || p2EloProb);
+        }
+
+        const p1FinalPct = (p1FinalProb * 100).toFixed(1);
+        const p2FinalPct = (p2FinalProb * 100).toFixed(1);
+
+        calculationHtml = `
+            <div class="factors-section">
+                <div class="factors-title">🧮 Cálculo da Previsão</div>
+                <div class="factors-summary">
+                    ${p1EloProb !== null ? `
+                        <div class="factors-summary-row">
+                            <span class="factors-summary-label">ELO (50%)</span>
+                            <span class="factors-summary-value">${p1Name}: ${(p1EloProb * 100).toFixed(1)}% | ${p2Name}: ${(p2EloProb * 100).toFixed(1)}%</span>
+                        </div>
+                    ` : ''}
+                    ${p1RankProb !== null ? `
+                        <div class="factors-summary-row">
+                            <span class="factors-summary-label">Ranking (30%)</span>
+                            <span class="factors-summary-value">${p1Name}: ${(p1RankProb * 100).toFixed(1)}% | ${p2Name}: ${(p2RankProb * 100).toFixed(1)}%</span>
+                        </div>
+                    ` : ''}
+                    ${p1OddsProb !== null ? `
+                        <div class="factors-summary-row">
+                            <span class="factors-summary-label">Odds (20%)</span>
+                            <span class="factors-summary-value">${p1Name}: ${(p1OddsProb * 100).toFixed(1)}% | ${p2Name}: ${(p2OddsProb * 100).toFixed(1)}%</span>
+                        </div>
+                    ` : ''}
+                    <div class="factors-summary-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
+                        <span class="factors-summary-label" style="font-weight:700">Final</span>
+                        <span class="factors-summary-value" style="font-weight:700">${p1Name}: ${p1FinalPct}% | ${p2Name}: ${p2FinalPct}%</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
     return `
         <div class="factors-section">
             <div class="factors-title">📊 Fatores de Previsão</div>
@@ -951,6 +1022,7 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds) {
                 ` : ''}
             </div>
         </div>
+        ${calculationHtml}
     `;
 }
 
