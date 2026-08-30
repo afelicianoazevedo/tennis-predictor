@@ -581,6 +581,11 @@ function showModal(m) {
     let p1Fav = predId && p1.id === predId;
     let p2Fav = predId && p2.id === predId;
 
+    if (!p1Fav && !p2Fav && predId) {
+        if (m.player1_name && predId === m.player1_name) p1Fav = true;
+        if (m.player2_name && predId === m.player2_name) p2Fav = true;
+    }
+
     if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
         p1Fav = false;
         p2Fav = false;

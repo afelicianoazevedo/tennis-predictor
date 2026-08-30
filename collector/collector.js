@@ -271,13 +271,24 @@ async function collectUpcoming() {
         return;
     }
 
-    const data = await liveRequest('/matches?status=upcoming&limit=100');
-    const matches = data?.data || [];
+    let data = null;
+    let matches = [];
+    try {
+        data = await liveRequest('/matches?status=upcoming&limit=100');
+        matches = data?.data || [];
+    } catch (e) {
+        console.error('Upcoming collection failed:', e.message);
+    }
+
     const currentIds = new Set();
 
     for (const match of matches) {
         currentIds.add(match.id);
-        await supabaseUpsert(match);
+        try {
+            await supabaseUpsert(match);
+        } catch (e) {
+            console.error(`Failed to upsert match ${match.id}:`, e.message);
+        }
     }
 
     state.trackedIds = [...currentIds];
@@ -294,14 +305,25 @@ async function collectLive() {
         return;
     }
 
-    const data = await liveRequest('/matches?status=live&limit=100');
-    const matches = data?.data || [];
+    let data = null;
+    let matches = [];
+    try {
+        data = await liveRequest('/matches?status=live&limit=100');
+        matches = data?.data || [];
+    } catch (e) {
+        console.error('Live collection failed:', e.message);
+    }
+
     const currentLiveIds = new Set(matches.map(m => m.id));
     const previousLiveIds = new Set(state.previousLiveIds || []);
     const finishedIds = [...previousLiveIds].filter(id => !currentLiveIds.has(id));
 
     for (const match of matches) {
-        await supabaseUpsert(match);
+        try {
+            await supabaseUpsert(match);
+        } catch (e) {
+            console.error(`Failed to upsert live match ${match.id}:`, e.message);
+        }
     }
 
     state.previousLiveIds = [...currentLiveIds];
