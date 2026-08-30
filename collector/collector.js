@@ -673,7 +673,7 @@ async function triggerPredictions() {
         return;
     }
     if (state.dailyRequests >= 100) return;
-    const url = `${SUPABASE_URL}/rest/v1/rpc/regenerate_predictions_for_live_upcoming`;
+    const url = `${SUPABASE_URL}/rest/v1/rpc/generate_all_predictions`;
     const res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -683,7 +683,8 @@ async function triggerPredictions() {
         }
     });
     if (res.ok) {
-        console.log('Predictions triggered');
+        const result = await res.json();
+        console.log('Predictions generated:', result);
     } else {
         const text = await res.text();
         console.error('Failed to trigger predictions:', res.status, text);
@@ -752,6 +753,7 @@ async function main() {
         await collectResults([...new Set(state.trackedIds)].filter(id => !isProcessed(id)));
         await collectStaleUpcoming();
         await collectOdds();
+        await triggerPredictions();
     } else {
         switch (MODE) {
             case 'upcoming':
