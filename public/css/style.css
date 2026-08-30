@@ -614,6 +614,12 @@ body {
     border-top: 1px solid var(--border);
 }
 
+.factors-section:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+
 .factors-title {
     font-size: 0.85rem;
     font-weight: 600;

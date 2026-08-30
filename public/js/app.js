@@ -672,6 +672,12 @@ function showModal(m) {
                 if (oddsP1El) oddsP1El.textContent = oddsText.p1;
                 if (oddsP2El) oddsP2El.textContent = oddsText.p2;
             }
+        }).catch(err => {
+            console.error('Error loading prediction data:', err);
+            const factorsEl = document.getElementById('modal-factors');
+            if (factorsEl) {
+                factorsEl.outerHTML = `<div class="factors-loading">Erro ao carregar fatores: ${err.message}</div>`;
+            }
         });
     }
 }
@@ -896,32 +902,7 @@ function renderOdds(odds) {
 }
 
 function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
-    if (!factors) {
-        if (odds && odds.player1_odd && odds.player2_odd) {
-            const p1Odd = Number(odds.player1_odd).toFixed(2);
-            const p2Odd = Number(odds.player2_odd).toFixed(2);
-            const p1Prob = Number((1 / odds.player1_odd) * 100).toFixed(1);
-            const p2Prob = Number((1 / odds.player2_odd) * 100).toFixed(1);
-            return `
-                <div class="factors-section">
-                    <div class="factors-title">📊 Odds de Mercado</div>
-                    <div class="factors-summary">
-                        <div class="factors-summary-row">
-                            <span class="factors-summary-label">${p1Name}</span>
-                            <span class="factors-summary-value">${p1Odd} (${p1Prob}%)</span>
-                        </div>
-                        <div class="factors-summary-row">
-                            <span class="factors-summary-label">${p2Name}</span>
-                            <span class="factors-summary-value">${p2Odd} (${p2Prob}%)</span>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-        return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
-    }
-
-    const factorsHtml = [
+    const factorsHtml = factors ? [
         ['Força', factors.player1_strength_score, factors.player2_strength_score],
         ['Forma', factors.player1_form_score, factors.player2_form_score],
         ['Superfície', factors.player1_surface_score, factors.player2_surface_score],
@@ -930,10 +911,10 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
         ['H2H', factors.player1_h2h_score, factors.player2_h2h_score],
         ['Mercado', factors.player1_market_score, factors.player2_market_score],
         ['Contexto', factors.player1_context_score, factors.player2_context_score]
-    ].map(([label, p1Score, p2Score]) => renderFactorBar(label, p1Score, p2Score, p1Name, p2Name)).filter(Boolean).join('');
+    ].map(([label, p1Score, p2Score]) => renderFactorBar(label, p1Score, p2Score, p1Name, p2Name)).filter(Boolean).join('') : '';
     
-    const agreement = factors.agreement_score !== null ? Math.round(factors.agreement_score) : null;
-    const dataQuality = factors.data_quality_score !== null ? Math.round(factors.data_quality_score) : null;
+    const agreement = factors?.agreement_score !== null ? Math.round(factors.agreement_score) : null;
+    const dataQuality = factors?.data_quality_score !== null ? Math.round(factors.data_quality_score) : null;
 
     let calculationHtml = '';
     if (p1 && p2) {
@@ -976,12 +957,10 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
             <div class="factors-section">
                 <div class="factors-title">🧮 Cálculo da Previsão</div>
                 <div class="factors-summary">
-                    ${p1EloProb !== null ? `
-                        <div class="factors-summary-row">
-                            <span class="factors-summary-label">ELO (50%)</span>
-                            <span class="factors-summary-value">${p1Name}: ${(p1EloProb * 100).toFixed(1)}% | ${p2Name}: ${(p2EloProb * 100).toFixed(1)}%</span>
-                        </div>
-                    ` : ''}
+                    <div class="factors-summary-row">
+                        <span class="factors-summary-label">ELO (50%)</span>
+                        <span class="factors-summary-value">${p1Name}: ${(p1EloProb * 100).toFixed(1)}% | ${p2Name}: ${(p2EloProb * 100).toFixed(1)}%</span>
+                    </div>
                     ${p1RankProb !== null ? `
                         <div class="factors-summary-row">
                             <span class="factors-summary-label">Ranking (30%)</span>
@@ -1001,6 +980,10 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
                 </div>
             </div>
         `;
+    }
+
+    if (!factors && !calculationHtml) {
+        return `<div class="factors-loading">A carregar fatores de previsão...</div>`;
     }
 
     return `
