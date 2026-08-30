@@ -955,31 +955,34 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
         const p1FinalPct = (p1FinalProb * 100).toFixed(1);
         const p2FinalPct = (p2FinalProb * 100).toFixed(1);
 
+        const rows = [
+            ['ELO (50%)', p1EloProb, p2EloProb],
+            ...(p1RankProb !== null ? [['Ranking (30%)', p1RankProb, p2RankProb]] : []),
+            ...(p1OddsProb !== null ? [['Odds (20%)', p1OddsProb, p2OddsProb]] : []),
+            ['Final', p1FinalProb, p2FinalProb, true]
+        ];
+
         calculationHtml = `
             <div class="factors-section">
                 <div class="factors-title">🧮 Cálculo da Previsão</div>
-                <div class="factors-summary">
-                    <div class="factors-summary-row">
-                        <span class="factors-summary-label">ELO (50%)</span>
-                        <span class="factors-summary-value">${p1Name}: ${(p1EloProb * 100).toFixed(1)}% | ${p2Name}: ${(p2EloProb * 100).toFixed(1)}%</span>
-                    </div>
-                    ${p1RankProb !== null ? `
-                        <div class="factors-summary-row">
-                            <span class="factors-summary-label">Ranking (30%)</span>
-                            <span class="factors-summary-value">${p1Name}: ${(p1RankProb * 100).toFixed(1)}% | ${p2Name}: ${(p2RankProb * 100).toFixed(1)}%</span>
-                        </div>
-                    ` : ''}
-                    ${p1OddsProb !== null ? `
-                        <div class="factors-summary-row">
-                            <span class="factors-summary-label">Odds (20%)</span>
-                            <span class="factors-summary-value">${p1Name}: ${(p1OddsProb * 100).toFixed(1)}% | ${p2Name}: ${(p2OddsProb * 100).toFixed(1)}%</span>
-                        </div>
-                    ` : ''}
-                    <div class="factors-summary-row" style="border-top:1px solid var(--border);padding-top:8px;margin-top:4px">
-                        <span class="factors-summary-label" style="font-weight:700">Final</span>
-                        <span class="factors-summary-value" style="font-weight:700">${p1Name}: ${p1FinalPct}% | ${p2Name}: ${p2FinalPct}%</span>
-                    </div>
-                </div>
+                <table class="calc-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>${p1Name}</th>
+                            <th>${p2Name}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows.map(([label, v1, v2, bold]) => `
+                            <tr ${bold ? 'style="font-weight:700;border-top:1px solid var(--border)"' : ''}>
+                                <td class="calc-label">${label}</td>
+                                <td class="calc-value">${(v1 * 100).toFixed(1)}%</td>
+                                <td class="calc-value">${(v2 * 100).toFixed(1)}%</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
             </div>
         `;
     }

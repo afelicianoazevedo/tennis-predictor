@@ -746,6 +746,44 @@ body {
     font-size: 0.8rem;
 }
 
+.calc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-top: 8px;
+}
+
+.calc-table th,
+.calc-table td {
+    padding: 8px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.calc-table th:first-child,
+.calc-table td:first-child {
+    text-align: left;
+    font-weight: 600;
+}
+
+.calc-table th {
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.calc-label {
+    color: var(--text-dim);
+    font-weight: 500;
+}
+
+.calc-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
 /* Loader */
 .loader {
     display: none;
