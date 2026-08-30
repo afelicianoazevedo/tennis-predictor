@@ -913,8 +913,8 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
         ['Contexto', factors.player1_context_score, factors.player2_context_score]
     ].map(([label, p1Score, p2Score]) => renderFactorBar(label, p1Score, p2Score, p1Name, p2Name)).filter(Boolean).join('') : '';
     
-    const agreement = factors?.agreement_score !== null ? Math.round(factors.agreement_score) : null;
-    const dataQuality = factors?.data_quality_score !== null ? Math.round(factors.data_quality_score) : null;
+    const agreement = (factors && typeof factors.agreement_score === 'number') ? Math.round(factors.agreement_score) : null;
+    const dataQuality = (factors && typeof factors.data_quality_score === 'number') ? Math.round(factors.data_quality_score) : null;
 
     let calculationHtml = '';
     if (p1 && p2) {

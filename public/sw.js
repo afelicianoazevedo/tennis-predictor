@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tennis-predictor-v1';
+const CACHE_NAME = 'tennis-predictor-v2';
 const ASSETS_TO_CACHE = [
     '/',
     '/index.html',
