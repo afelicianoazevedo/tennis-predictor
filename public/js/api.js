@@ -6,8 +6,8 @@ async function apiSelect(table, options = {}) {
     const params = new URLSearchParams();
     params.set('select', select);
     for (const [key, value] of Object.entries(eq)) params.set(key, `eq.${value}`);
-    if (gte) for (const [key, value] of Object.entries(gte)) params.set(key, `gte.${value}`);
-    if (lte) for (const [key, value] of Object.entries(lte)) params.set(key, `lte.${value}`);
+    if (gte) for (const [key, value] of Object.entries(gte)) params.append(key, `gte.${value}`);
+    if (lte) for (const [key, value] of Object.entries(lte)) params.append(key, `lte.${value}`);
     if (order) params.set('order', order);
     if (limit) params.set('limit', limit.toString());
 

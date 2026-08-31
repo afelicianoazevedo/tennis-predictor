@@ -21,8 +21,8 @@ async function api(table, opts = {}) {
     const { select = '*', eq = {}, gte = {}, lte = {}, order = 'scheduled_at.asc', limit = 100, or = '' } = opts;
     const p = new URLSearchParams({ select, order, limit: limit.toString() });
     Object.entries(eq).forEach(([k, v]) => p.set(k, `eq.${v}`));
-    Object.entries(gte).forEach(([k, v]) => p.set(k, `gte.${v}`));
-    Object.entries(lte).forEach(([k, v]) => p.set(k, `lte.${v}`));
+    Object.entries(gte).forEach(([k, v]) => p.append(k, `gte.${v}`));
+    Object.entries(lte).forEach(([k, v]) => p.append(k, `lte.${v}`));
     if (or) p.set('or', or);
 
     const url = `${SUPABASE_URL}/rest/v1/${table}?${p}`;
