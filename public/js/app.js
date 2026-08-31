@@ -83,10 +83,10 @@ function filterPrediction(matches, filter) {
         return p1.includes('/') || p2.includes('/');
     };
     if (filter === 'with-prediction') {
-        return matches.filter(m => m.confidence_score != null && !isDoubles(m));
+        return matches.filter(m => m.predicted_winner_id != null && !isDoubles(m));
     }
     if (filter === 'without-prediction') {
-        return matches.filter(m => m.confidence_score == null || isDoubles(m));
+        return matches.filter(m => m.predicted_winner_id == null || isDoubles(m));
     }
     return matches;
 }
@@ -123,7 +123,6 @@ async function loadAllMatches(date) {
     return all.filter(m => {
         const matchDate = m.scheduled_at ? m.scheduled_at.split('T')[0] : '';
         if (matchDate !== d) return false;
-        if (m.status !== 'completed' && m.confidence_score === 50) return false;
         return true;
     });
 }
@@ -267,24 +266,19 @@ function parseSets(m) {
 }
 
 function confClass(prob, confidenceScore) {
-    if (prob == null && confidenceScore == null) return '';
-    const value = prob != null ? prob : confidenceScore;
-    if (value >= 50 && value <= 60) return 'uncertain';
-    if (value > 60 && value <= 75) return 'dangerous';
-    if (value > 75 && value <= 90) return 'tendency';
-    if (value > 90 && value <= 100) return 'strong';
-    if (value < 50) return 'uncertain';
-    return 'uncertain';
+    if (confidenceScore == null) return '';
+    if (confidenceScore < 50) return 'uncertain';
+    if (confidenceScore < 60) return 'dangerous';
+    if (confidenceScore < 70) return 'tendency';
+    return 'strong';
 }
 
 function confLabel(s) {
     if (s == null) return '';
-    if (s >= 50 && s <= 60) return 'INCERTO';
-    if (s > 60 && s <= 75) return 'ARRISCADO';
-    if (s > 75 && s <= 90) return 'TENDÊNCIA';
-    if (s > 90 && s <= 100) return 'FORTE';
     if (s < 50) return 'INCERTO';
-    return 'INCERTO';
+    if (s < 60) return 'PERIGOSO';
+    if (s < 70) return 'TENDÊNCIA';
+    return 'FORTE';
 }
 
 function applyTheme(theme) {
@@ -444,26 +438,18 @@ function renderMatch(m) {
     const cs = m.confidence_score;
     const p1Prob = m.player1_probability;
     const p2Prob = m.player2_probability;
-    const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
-    let p1Fav = predId && p1.id === predId;
-    let p2Fav = predId && p2.id === predId;
+    let p1Fav = predId && p1.id === predId && p1Prob > 57;
+    let p2Fav = predId && p2.id === predId && p2Prob > 57;
 
-    if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
-        p1Fav = false;
-        p2Fav = false;
-    } else if (!predId && p1Prob != null && p2Prob != null) {
-        if (p1Prob > p2Prob) p1Fav = true;
-        else if (p2Prob > p1Prob) p2Fav = true;
-    }
     const isCompleted = m.status === 'completed';
     const isLive = m.status === 'live';
 
     const wasCorrect = isCompleted && predId && m.winner_id ? (predId === m.winner_id) : null;
     const p1Display = p1Prob != null ? p1Prob.toFixed(1) : null;
     const p2Display = p2Prob != null ? p2Prob.toFixed(1) : null;
-    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${cc}">${p1Display}%</span>` : (p1Fav && p1Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
-    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${cc}">${p2Display}%</span>` : (p2Fav && p2Prob == null && cs != null ? `<span class="confidence ${cc}">${confLabel(cs)} ${cs}%</span>` : '');
+    const p1Confidence = (p1Fav && p1Prob != null) ? `<span class="confidence ${confClass(p1Prob, cs)}">${p1Display}%</span>` : '';
+    const p2Confidence = (p2Fav && p2Prob != null) ? `<span class="confidence ${confClass(p2Prob, cs)}">${p2Display}%</span>` : '';
     const setCount = getSetCount(m);
     const p1ResultBadge = (p1Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p1Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
     const p2ResultBadge = (p2Fav && isCompleted && wasCorrect === true) ? '<span class="check">✓</span>' : (p2Fav && isCompleted && wasCorrect === false) ? '<span class="cross">✗</span>' : '';
@@ -473,7 +459,7 @@ function renderMatch(m) {
     const p2Info = `${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''}`;
 
     return `
-        <div class="match c-${cc} ${isCompleted ? 'is-completed' : ''}" data-id="${m.id}">
+        <div class="match c-${confClass(p1Prob || p2Prob, cs)} ${isCompleted ? 'is-completed' : ''}" data-id="${m.id}">
             <div class="match-time">
                 <span class="match-date-short">${dateShort(m.scheduled_at)}</span>
                 <span class="match-time-text">${time(m.scheduled_at)}</span>
@@ -579,22 +565,13 @@ function showModal(m) {
     const cs = m.confidence_score;
     const p1Prob = m.player1_probability;
     const p2Prob = m.player2_probability;
-    const cc = confClass(p1Prob || p2Prob, cs);
     const predId = m.predicted_winner_id;
-    let p1Fav = predId && p1.id === predId;
-    let p2Fav = predId && p2.id === predId;
+    let p1Fav = predId && p1.id === predId && p1Prob > 57;
+    let p2Fav = predId && p2.id === predId && p2Prob > 57;
 
     if (!p1Fav && !p2Fav && predId) {
         if (m.player1_name && predId === m.player1_name) p1Fav = true;
         if (m.player2_name && predId === m.player2_name) p2Fav = true;
-    }
-
-    if (p1Prob != null && p2Prob != null && Math.abs(p1Prob - p2Prob) <= 0.01) {
-        p1Fav = false;
-        p2Fav = false;
-    } else if (predId && p1Prob != null && p2Prob != null) {
-        if (p1Prob > p2Prob) p1Fav = true;
-        else if (p2Prob > p1Prob) p2Fav = true;
     }
 
     const p1Name = p1.name || m.player1_name || 'TBD';
@@ -603,6 +580,7 @@ function showModal(m) {
     const favLabel = p1Fav ? p1Name : (p2Fav ? p2Name : null);
     const wasCorrect = m.status === 'completed' && predId && m.winner_id ? (predId === m.winner_id) : null;
     const showResult = m.status === 'completed' && m.score;
+    const hasPrediction = p1Fav || p2Fav;
 
     const setCount = getSetCount(m);
     const setsInfo = m.status === 'completed' && setCount ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-top:4px">Sets: ${setCount}</div>` : '';
@@ -615,7 +593,7 @@ function showModal(m) {
                 <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p1Name}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p1.country || ''} ${p1.ranking ? '(#' + p1.ranking + ')' : ''} ${p1.elo_rating && p1.elo_rating !== 1500 ? '(ELO ' + Math.round(p1.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p1" style="font-size:0.7rem;color:#fbbf24;min-height:1.2em"></div>
-                ${p1Fav && p1Prob != null ? `<span class="confidence ${cc}">${p1Prob.toFixed(1)}%</span>` : '<span class="confidence" style="visibility:hidden">0%</span>'}
+                ${p1Fav && p1Prob != null ? `<span class="confidence ${confClass(p1Prob, cs)}">${p1Prob.toFixed(1)}%</span>` : '<span class="confidence" style="visibility:hidden">0%</span>'}
                 ${p1Fav && cs != null ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">Confiança: ${cs.toFixed(0)}%</div>` : '<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;visibility:hidden">Confiança: 0%</div>'}
             </div>
             <div style="text-align:center">
@@ -626,20 +604,22 @@ function showModal(m) {
                 <div style="font-weight:700;font-size:1rem;min-height:2.4em;line-height:1.2">${p2Name}</div>
                 <div style="font-size:0.75rem;color:var(--text-dim);min-height:1.2em">${p2.country || ''} ${p2.ranking ? '(#' + p2.ranking + ')' : ''} ${p2.elo_rating && p2.elo_rating !== 1500 ? '(ELO ' + Math.round(p2.elo_rating) + ')' : ''}</div>
                 <div id="modal-odds-p2" style="font-size:0.7rem;color:#fbbf24;min-height:1.2em"></div>
-                ${p2Fav && p2Prob != null ? `<span class="confidence ${cc}">${p2Prob.toFixed(1)}%</span>` : '<span class="confidence" style="visibility:hidden">0%</span>'}
+                ${p2Fav && p2Prob != null ? `<span class="confidence ${confClass(p2Prob, cs)}">${p2Prob.toFixed(1)}%</span>` : '<span class="confidence" style="visibility:hidden">0%</span>'}
                 ${p2Fav && cs != null ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px">Confiança: ${cs.toFixed(0)}%</div>` : '<div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;visibility:hidden">Confiança: 0%</div>'}
             </div>
         </div>
-        ${(p1Fav || p2Fav) && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${p1Prob.toFixed(1)}%</strong> vs <strong>${p2Prob.toFixed(1)}%</strong></div>` : ''}
+        ${hasPrediction && p1Prob != null && p2Prob != null ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">Probabilidade: <strong>${p1Prob.toFixed(1)}%</strong> vs <strong>${p2Prob.toFixed(1)}%</strong></div>` : ''}
+        ${hasPrediction ? `
         <div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:12px;text-align:center">
             <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Previsão</div>
             <div style="font-weight:700;font-size:0.95rem">${favLabel || (p1Prob > p2Prob ? p1Name : p2Name)}</div>
             <div style="margin-top:6px">
-                ${favProb != null ? `<span class="confidence ${cc}">${favProb.toFixed(1)}%</span>` : ''}
+                ${favProb != null ? `<span class="confidence ${confClass(favProb, cs)}">${favProb.toFixed(1)}%</span>` : ''}
                 ${cs != null ? `<span style="font-size:0.7rem;color:var(--text-dim);margin-left:6px">${confLabel(cs)} ${cs.toFixed(0)}%</span>` : ''}
             </div>
             ${showResult && wasCorrect != null ? `<div style="margin-top:6px;font-size:0.8rem;color:${wasCorrect ? '#22c55e' : '#ef4444'};font-weight:600">${wasCorrect ? '✓ Previsão correta' : '✗ Previsão incorreta'}</div>` : ''}
         </div>
+        ` : ''}
         <div id="modal-h2h" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px"></div>
         <div id="modal-factors" style="text-align:center;font-size:0.8rem;color:var(--text-dim);margin-bottom:12px">
             <div class="factors-loading">A carregar fatores de previsão e odds...</div>
@@ -929,22 +909,33 @@ function renderPredictionFactors(factors, p1Name, p2Name, odds, p1, p2) {
             p2OddsProb = 1 - p1OddsProb;
         }
 
-        let p1FinalProb, p2FinalProb;
-        if (p1OddsProb !== null) {
-            p1FinalProb = 0.5 * p1EloProb + 0.3 * (p1RankProb || p1EloProb) + 0.2 * p1OddsProb;
-            p2FinalProb = 0.5 * p2EloProb + 0.3 * (p2RankProb || p2EloProb) + 0.2 * p2OddsProb;
-        } else {
-            p1FinalProb = 0.6 * p1EloProb + 0.4 * (p1RankProb || p1EloProb);
-            p2FinalProb = 0.6 * p2EloProb + 0.4 * (p2RankProb || p2EloProb);
+        let p1FinalProb = p1RankProb || p1EloProb;
+        let p2FinalProb = p2RankProb || p2EloProb;
+
+        if (p1RankProb !== null) {
+            p1FinalProb = p1RankProb;
+            p2FinalProb = p2RankProb;
+        }
+
+        const eloDecisive = p1EloProb > 0.57 || p2EloProb > 0.57;
+        if (eloDecisive) {
+            p1FinalProb = p1FinalProb * 0.7 + p1EloProb * 0.3;
+            p2FinalProb = p2FinalProb * 0.7 + p2EloProb * 0.3;
+        }
+
+        const oddsDecisive = p1OddsProb !== null && (p1OddsProb > 0.57 || p2OddsProb > 0.57);
+        if (oddsDecisive) {
+            p1FinalProb = p1FinalProb * 0.7 + p1OddsProb * 0.3;
+            p2FinalProb = p2FinalProb * 0.7 + p2OddsProb * 0.3;
         }
 
         const p1FinalPct = (p1FinalProb * 100).toFixed(1);
         const p2FinalPct = (p2FinalProb * 100).toFixed(1);
 
         const rows = [
-            ['ELO (50%)', p1EloProb, p2EloProb],
-            ...(p1RankProb !== null ? [['Ranking (30%)', p1RankProb, p2RankProb]] : []),
-            ...(p1OddsProb !== null ? [['Odds (20%)', p1OddsProb, p2OddsProb]] : []),
+            ['ELO', p1EloProb, p2EloProb],
+            ...(p1RankProb !== null ? [['Ranking', p1RankProb, p2RankProb]] : []),
+            ...(p1OddsProb !== null ? [['Odds', p1OddsProb, p2OddsProb]] : []),
             ['Final', p1FinalProb, p2FinalProb, true]
         ];
 
