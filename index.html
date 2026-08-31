@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Tennis Predictor - Análise e previsão de jogos de ténis">
+    <title>Tennis Predictor</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="stylesheet" href="css/style.css?v=3">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="header-content">
+                <h1><span class="logo">🎾</span> Tennis Predictor</h1>
+                <button id="install-btn" class="btn-install" style="display: none;">
+                    <span>⬇</span> Instalar
+                </button>
+            </div>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab active" data-tab="matches">
+                <span class="tab-icon">🎾</span>
+                <span class="tab-label">Games</span>
+            </button>
+            <button class="tab" data-tab="results">
+                <span class="tab-icon">✅</span>
+                <span class="tab-label">Results</span>
+            </button>
+            <button class="tab" data-tab="stats">
+                <span class="tab-icon">📊</span>
+                <span class="tab-label">Stats</span>
+            </button>
+            <button class="tab" data-tab="settings">
+                <span class="tab-icon">⚙️</span>
+                <span class="tab-label">Settings</span>
+            </button>
+            <button class="tab" data-tab="about">
+                <span class="tab-icon">ℹ️</span>
+                <span class="tab-label">About</span>
+            </button>
+        </nav>
+
+        <main class="content">
+            <section id="tab-matches" class="panel active">
+                <div class="filters">
+                    <select id="filter-select" class="filter-select">
+                        <option value="all">ALL</option>
+                        <option value="men">Man</option>
+                        <option value="women">Woman</option>
+                        <option value="doubles">Doubles</option>
+                    </select>
+                    <span class="match-counter" id="match-counter">0</span>
+                    <div class="date-selector">
+                        <button class="date-btn" id="date-prev">&lt;</button>
+                        <input type="date" id="date-input" class="date-input">
+                        <button class="date-btn" id="date-next">&gt;</button>
+                    </div>
+                </div>
+                <div id="matches-list" class="matches"></div>
+            </section>
+            <section id="tab-results" class="panel">
+                <div class="filters">
+                    <select id="results-filter-select" class="filter-select">
+                        <option value="all">ALL</option>
+                        <option value="men">Man</option>
+                        <option value="women">Woman</option>
+                        <option value="doubles">Doubles</option>
+                    </select>
+                    <span class="match-counter" id="results-counter">0</span>
+                    <div class="date-selector">
+                        <button class="date-btn" id="results-date-prev">&lt;</button>
+                        <input type="date" id="results-date-input" class="date-input">
+                        <button class="date-btn" id="results-date-next">&gt;</button>
+                    </div>
+                </div>
+                <div id="results-list" class="matches"></div>
+            </section>
+            <section id="tab-stats" class="panel">
+                <div class="stats-filters">
+                    <select id="stats-filter-select" class="filter-select">
+                        <option value="all">ALL</option>
+                        <option value="men">Man</option>
+                        <option value="women">Woman</option>
+                        <option value="doubles">Doubles</option>
+                    </select>
+                    <button class="period-btn" data-period="all">Todos</button>
+                    <button class="period-btn active" data-period="day">Hoje</button>
+                    <button class="period-btn" data-period="week">Semana</button>
+                    <button class="period-btn" data-period="month">Mês</button>
+                    <button class="period-btn" data-period="year">Ano</button>
+                </div>
+                <div id="stats-panel" class="stats"></div>
+                <div class="chart-container">
+                    <canvas id="accuracy-chart"></canvas>
+                </div>
+            </section>
+            <section id="tab-settings" class="panel">
+                <div class="settings-group">
+                    <label class="setting-item">
+                        <span>Tema</span>
+                        <select id="setting-theme">
+                            <option value="dark">Escuro</option>
+                            <option value="light">Claro</option>
+                        </select>
+                    </label>
+                    <label class="setting-item">
+                        <span>Odds</span>
+                        <select id="setting-odds-filter">
+                            <option value="all">Todos os jogos</option>
+                            <option value="odds">Apenas jogos com odds</option>
+                        </select>
+                    </label>
+                    <label class="setting-item">
+                        <span>Previsão</span>
+                        <select id="setting-prediction-filter">
+                            <option value="all">Todos</option>
+                            <option value="with-prediction">Com previsão</option>
+                            <option value="without-prediction">Sem previsão</option>
+                        </select>
+                    </label>
+                </div>
+            </section>
+            <section id="tab-about" class="panel">
+                <div class="about-box">
+                    <h2>Sobre</h2>
+                    <p>O Tennis Predictor combina dados históricos, forma, superfície, ranking e odds de mercado para estimar a probabilidade de vitória de cada jogador.</p>
+                    <h3>Critérios de classificação</h3>
+                    <ul>
+                        <li><strong>Increrto</strong>: 50% – 60%</li>
+                        <li><strong>Arriscado</strong>: 60% – 75%</li>
+                        <li><strong>Tendência</strong>: 75% – 90%</li>
+                        <li><strong>Forte</strong>: 90% – 100%</li>
+                    </ul>
+                    <p>A classificação reflete a confiança do modelo na previsão. Quanto mais próxima de 100%, mais forte é a tendência apontada.</p>
+                </div>
+            </section>
+        </main>
+
+        <div id="modal" class="modal">
+            <div class="modal-box">
+                <button class="modal-close">&times;</button>
+                <div id="modal-content"></div>
+            </div>
+        </div>
+
+        <div id="loader" class="loader"></div>
+        <div id="toast" class="toast"></div>
+    </div>
+
+    <script src="js/app.js?v=10"></script>
+</body>
+</html>
