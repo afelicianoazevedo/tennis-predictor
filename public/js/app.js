@@ -198,6 +198,7 @@ async function loadStats(period = 'day', gameType = 'all') {
     const matches = await api('matches', {
         select: 'id,status,scheduled_at,category,predicted_winner_id,winner_id',
         order: 'scheduled_at.desc',
+        limit: 1000,
         ...(start ? { gte: { scheduled_at: start } } : {}),
         ...(end ? { lte: { scheduled_at: end } } : {})
     });
