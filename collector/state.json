@@ -1,9 +1,9 @@
 {
   "trackedIds": [],
-  "lastResetDate": "2026-11-01",
-  "dailyRequests": 39,
+  "lastResetDate": "2026-11-02",
+  "dailyRequests": 2,
   "previousLiveIds": [],
-  "lastLiveRun": "2026-11-01T23:28:39.887Z",
+  "lastLiveRun": "2026-11-02T05:44:19.358Z",
   "processedMatchIds": {},
-  "lastUpcomingRun": "2026-11-01T23:28:37.367Z"
+  "lastUpcomingRun": "2026-11-02T05:44:16.097Z"
 }
